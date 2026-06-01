@@ -1,7 +1,9 @@
 from dotenv import load_dotenv
-load_dotenv()  # This automatically finds the .env file and injects the key!
+load_dotenv()  # Automatically injects the GEMINI_API_KEY from Render environment settings
 import os
 import io
+import json
+from typing import List
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -12,7 +14,7 @@ import pandas as pd
 
 app = FastAPI()
 
-# Enable CORS so our frontend can communicate with the backend
+# Enable CORS so your local desktop HTML file can talk to the Render Cloud server
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -20,7 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 1. Define the exact schema we need extracted
+# Define the data contract for extraction
 class PolicyExtraction(BaseModel):
     policy_no: str = Field(description="The unique policy or certificate number")
     insurer_company: str = Field(description="Name of the insurance company")
@@ -32,56 +34,68 @@ class PolicyExtraction(BaseModel):
     policy_end_date: str = Field(description="The expiry or end date of the policy")
 
 # Initialize the Gemini Client
-# It will automatically look for the GEMINI_API_KEY environment variable
 client = genai.Client()
 
 @app.post("/extract-batch")
-async def extract_policy_data(file: UploadFile = File(...)):
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
+async def extract_multiple_policies(files: List[UploadFile] = File(...)):
+    """Accepts multiple files, iterates through them, and packages structured responses"""
+    combined_results = []
     
-    try:
-        # Read the uploaded PDF file bytes
-        pdf_bytes = await file.read()
-        
-        # 2. Call Gemini API to perform the OCR-less structured data extraction
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[
-                types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
-                "Analyze this insurance policy copy and accurately extract the requested fields mapping them exactly to the schema contract provided."
-            ],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=PolicyExtraction,
-                temperature=0.0, # Low temperature ensures strict factual data matching
-            ),
-        )
-        
-        # The response.text is guaranteed to be valid JSON matching our Pydantic class
-        return {"success": True, "data": response.text}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    for file in files:
+        if not file.filename.endswith('.pdf'):
+            continue  # Skip non-PDF items gracefully
+            
+        try:
+            pdf_bytes = await file.read()
+            
+            # Call Gemini API to extract data fields natively
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[
+                    types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                    "Analyze this insurance policy copy and accurately extract the requested fields mapping them exactly to the schema contract provided."
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=PolicyExtraction,
+                    temperature=0.0,
+                ),
+            )
+            
+            # Parse response string into a structured dictionary element
+            extracted_dict = json.loads(response.text)
+            extracted_dict["source_file"] = file.filename  # Attaches filename tracking
+            combined_results.append(extracted_dict)
+            
+        except Exception as e:
+            # Fallback error row payload if an individual file processing step defaults
+            combined_results.append({
+                "policy_no": "ERROR", 
+                "insurer_company": "Failed to parse file",
+                "customer_name": f"Error message: {str(e)}", 
+                "gross_premium": "0", "gst": "0",
+                "product_name": "N/A", "policy_start_date": "N/A", "policy_end_date": "N/A",
+                "source_file": file.filename
+            })
+            
+    return {"success": True, "results": combined_results}
 
-@app.post("/export-excel")
-async def export_to_excel(data: dict):
+@app.post("/export-excel-batch")
+async def export_batch_to_excel(data: List[dict]):
+    """Accepts JSON extraction list arrays and builds a clean vertical stacked Excel sheet"""
     try:
-        # Convert the received data dictionary into a DataFrame
-        df = pd.DataFrame([data])
+        df = pd.DataFrame(data)
         
-        # Rename columns for presentation in Excel
+        # Format table headers to be user-friendly spaces
         df.columns = [col.replace('_', ' ').title() for col in df.columns]
         
-        # Save Excel to an in-memory buffer
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='Extracted Policy')
+            df.to_excel(writer, index=False, sheet_name='Batch Extraction')
         output.seek(0)
         
-        # 3. Stream the file back to the browser for direct download
         headers = {
-            'Content-Disposition': 'attachment; filename="extracted_policy.xlsx"'
+            'Content-Disposition': 'attachment; filename="consolidated_policies_report.xlsx"'
         }
         return StreamingResponse(output, headers=headers, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         
@@ -90,4 +104,6 @@ async def export_to_excel(data: dict):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    # Render cloud binds dynamically using environment ports
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
