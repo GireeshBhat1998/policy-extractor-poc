@@ -35,7 +35,7 @@ class PolicyExtraction(BaseModel):
 # It will automatically look for the GEMINI_API_KEY environment variable
 client = genai.Client()
 
-@app.post("/extract")
+@app.post("/extract-batch")
 async def extract_policy_data(file: UploadFile = File(...)):
     if not file.filename.endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
