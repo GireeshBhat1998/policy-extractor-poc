@@ -62,7 +62,7 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
             
             # Call Gemini API to extract data fields natively
             response = client.models.generate_content(
-                model="gemini-2.5-flash-lite",
+                model="gemini-2.5-pro",
                 contents=[
                     types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
                     "Analyze this insurance policy copy and accurately extract the requested fields mapping them exactly to the schema contract provided."
