@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Batch Policy Extractor & Operations Grid</title>
+    <title>Policy Data Processing Tool</title>
     <style>
         /* Modern Fluid UX Foundation - Auto-scaling padding/widths based on viewport bounds */
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -55,7 +55,7 @@
 </head>
 <body>
 
-    <h2>AI Accelerated Batch Policy Extractor</h2>
+    <h2>Policy Data Processing Tool</h2>
     
     <div class="card">
         <h3>1. Select Sales Period</h3>
@@ -175,7 +175,6 @@
                 if (response.ok) {
                     batchDataGlobal = result.results;
                     renderOperationalGrid();
-                    // Text update 3: Processing completed successfully! Proceed to Verification Matrix
                     status.innerText = "Processing completed successfully! Proceed to Verification Matrix";
                 } else {
                     status.innerText = `Error: ${result.detail || 'Failed parsing package'}`;
@@ -280,12 +279,12 @@
             
             for (let i = 0; i < batchDataGlobal.length; i++) {
                 const rm = document.getElementById(`rmInput-${i}`).value;
-                const agentId = document.getElementById(`agentIdSpan-${i}).getAttribute('data-clean-id')`);
+                const idSpan = document.getElementById(`agentIdSpan-${i}`);
+                const agentId = idSpan ? idSpan.getAttribute('data-clean-id') : null;
                 const gross = document.getElementById(`grossInput-${i}`).value;
                 const prem = document.getElementById(`premiumInput-${i}`).value;
                 const rate = document.getElementById(`rateInput-${i}`).value;
                 
-                // Adjustment: inputs are validated as complete even if values equal literal 0 string loops
                 if (!rm || !agentId || gross === "" || prem === "" || rate === "" || parseFloat(gross) < 0 || parseFloat(prem) < 0 || parseFloat(rate) < 0) {
                     checksPassed = false;
                     break;
