@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Batch Policy Extractor & Operations Grid</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1200px; margin: 40px auto; padding: 0 20px; color: #333; background-color: #fcfcfc; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1300px; margin: 40px auto; padding: 0 20px; color: #333; background-color: #fcfcfc; }
         .card { border: 1px solid #e0e0e0; padding: 24px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-color: #fff; margin-bottom: 25px; }
         .upload-section { margin-bottom: 10px; }
         
@@ -75,13 +75,15 @@
             <table id="resultTable">
                 <thead>
                     <tr>
-                        <th style="width: 15%;">Source File</th>
-                        <th style="width: 20%;">Policy & Insurer Context</th>
-                        <th style="width: 18%;">Relationship Manager</th>
-                        <th style="width: 18%;">POSP / Agent Search</th>
-                        <th style="width: 12%;">Comm. Premium</th>
+                        <th style="width: 12%;">Source File</th>
+                        <th style="width: 16%;">Policy & Insurer Context</th>
+                        <th style="width: 15%;">Relationship Manager</th>
+                        <th style="width: 15%;">POSP / Agent Search</th>
+                        <th style="width: 12%;">Gross Premium (Editable)</th>
+                        <th style="width: 10%;">GST Amount (Editable)</th>
+                        <th style="width: 10%;">Comm. Premium</th>
                         <th style="width: 8%;">Brokerage %</th>
-                        <th style="width: 9%;">Calculated Brokerage</th>
+                        <th style="width: 10%;">Calculated Brokerage</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
@@ -106,12 +108,10 @@
             const targetYear = new Date().getFullYear();
             yearDropdown.innerHTML = '<option value="">-- Choose Year --</option>';
             
-            // Loop dynamically injects 2 past years, current year, and 1 future year options
             for (let y = targetYear - 2; y <= targetYear + 1; y++) {
                 yearDropdown.innerHTML += `<option value="${y}">${y}</option>`;
             }
 
-            // Securely stream dynamic lists down from backend JSON storage allocations
             try {
                 const response = await fetch(`${BACKEND_URL}/metadata`);
                 if (response.ok) {
@@ -169,6 +169,14 @@
             }
         }
 
+        function cleanIncomingNumber(val) {
+            if (!val) return 0;
+            // Converts to string, strips out formatting commas, and parses properly
+            const stringClean = String(val).replace(/,/g, '').trim();
+            const parsed = parseFloat(stringClean);
+            return isNaN(parsed) ? 0 : parsed;
+        }
+
         function renderOperationalGrid() {
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = "";
@@ -176,6 +184,10 @@
             batchDataGlobal.forEach((item, index) => {
                 const isError = item.policy_no === "ERROR";
                 const rowClass = isError ? "class='error-row'" : "";
+                
+                // Safely sanitize commas out before embedding values into the numeric inputs
+                const cleanGross = cleanIncomingNumber(item.gross_premium);
+                const cleanGst = cleanIncomingNumber(item.gst);
                 
                 tbody.innerHTML += `
                     <tr ${rowClass}>
@@ -190,6 +202,12 @@
                         <td>
                             <input type="text" list="agentOptionsList" id="agentInput-${index}" placeholder="Type name or ID..." oninput="extractAgentRosterContext(${index})">
                             <span id="agentIdSpan-${index}" class="sub-id-label">ID: Not Selected</span>
+                        </td>
+                        <td>
+                            <input type="number" id="grossInput-${index}" value="${cleanGross}" step="0.01" oninput="evaluateGridValidation()">
+                        </td>
+                        <td>
+                            <input type="number" id="gstInput-${index}" value="${cleanGst}" step="0.01" oninput="evaluateGridValidation()">
                         </td>
                         <td>
                             <input type="number" id="premiumInput-${index}" placeholder="0.00" step="0.01" oninput="executeLiveRowMath(${index})">
@@ -207,7 +225,6 @@
             evaluateGridValidation();
         }
 
-        // Live Regex Parsing Engine to break apart "Agent Name [POSP-ID]" configurations automatically
         function extractAgentRosterContext(idx) {
             const val = document.getElementById(`agentInput-${idx}`).value;
             const targetSpan = document.getElementById(`agentIdSpan-${idx}`);
@@ -225,23 +242,20 @@
             evaluateGridValidation();
         }
 
-        // Instant mathematical compiler block matching requested parameters explicitly
         function executeLiveRowMath(idx) {
             const premVal = parseFloat(document.getElementById(`premiumInput-${idx}`).value) || 0;
             const rateInput = document.getElementById(`rateInput-${idx}`);
             let rateVal = parseFloat(rateInput.value) || 0;
             
-            // Boundary lock controls (Forcing values strictly between 0 and 100)
             if (rateVal < 0) { rateVal = 0; rateInput.value = 0; }
             if (rateVal > 100) { rateVal = 100; rateInput.value = 100; }
             
             const outcome = premVal * (rateVal / 100);
-            document.getElementById(`brokerageCalcCell-${idx}`).innerText = outcome.toFixed(2); // String formatting rounding safely to 2 decimals
+            document.getElementById(`brokerageCalcCell-${idx}`).innerText = outcome.toFixed(2);
             
             evaluateGridValidation();
         }
 
-        // Operational Form Verification State Machine Evaluation
         function evaluateGridValidation() {
             if (!batchDataGlobal) return;
             
@@ -254,11 +268,12 @@
             for (let i = 0; i < batchDataGlobal.length; i++) {
                 const rm = document.getElementById(`rmInput-${i}`).value;
                 const agentId = document.getElementById(`agentIdSpan-${i}`).getAttribute('data-clean-id');
+                const gross = document.getElementById(`grossInput-${i}`).value;
+                const gst = document.getElementById(`gstInput-${i}`).value;
                 const prem = document.getElementById(`premiumInput-${i}`).value;
                 const rate = document.getElementById(`rateInput-${i}`).value;
                 
-                // Ensure inputs exist and values match baseline logical rules
-                if (!rm || !agentId || !prem || !rate || parseFloat(prem) < 0 || parseFloat(rate) < 0) {
+                if (!rm || !agentId || !gross || !gst || !prem || !rate || parseFloat(prem) < 0 || parseFloat(rate) < 0) {
                     checksPassed = false;
                     break;
                 }
@@ -282,7 +297,6 @@
             const month = document.getElementById('businessMonth').value;
             const year = document.getElementById('businessYear').value;
             
-            // Map table inputs together into a single structured compilation array
             const structuralPayload = batchDataGlobal.map((item, idx) => {
                 const idSpan = document.getElementById(`agentIdSpan-${idx}`);
                 return {
@@ -293,8 +307,9 @@
                     insurer_company: item.insurer_company,
                     customer_name: item.customer_name,
                     product_name: item.product_name,
-                    gross_premium: parseFloat(item.gross_premium) || 0,
-                    gst: parseFloat(item.gst) || 0,
+                    // Pulls the live updated user inputs rather than the raw static text definitions
+                    gross_premium: parseFloat(document.getElementById(`grossInput-${idx}`).value) || 0,
+                    gst: parseFloat(document.getElementById(`gstInput-${idx}`).value) || 0,
                     policy_start_date: item.policy_start_date,
                     policy_end_date: item.policy_end_date,
                     relationship_manager: document.getElementById(`rmInput-${idx}`).value,
