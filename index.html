@@ -127,7 +127,6 @@
     <script>
         let batchDataGlobal = null;
         let dynamicRosters = { rms: [], agents: [] };
-        
         const BACKEND_URL = "https://policy-extractor.onrender.com"; 
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -149,9 +148,13 @@
         });
 
         function populateDatalistStructures() {
-            document.getElementById('rmOptionsList').innerHTML = dynamicRosters.rms.map(rm => `<option value="${rm}">`).join('');
-            // 🔥 FIXED: Mapped ag.id to ag.agentID to match your structural json keys perfectly
-            document.getElementById('agentOptionsList').innerHTML = dynamicRosters.agents.map(ag => `<option value="${ag.name} [${ag.agentID}]" data-id="${ag.agentID}" data-name="${ag.name}">`).join('');
+            if(dynamicRosters.rms) {
+                document.getElementById('rmOptionsList').innerHTML = dynamicRosters.rms.map(rm => `<option value="${rm}">`).join('');
+            }
+            if(dynamicRosters.agents) {
+                // 🔥 FIXED: Explicitly maps to ag.id to align 100% with your agent_list.json file
+                document.getElementById('agentOptionsList').innerHTML = dynamicRosters.agents.map(ag => `<option value="${ag.name} [${ag.id}]" data-id="${ag.id}" data-name="${ag.name}">`).join('');
+            }
         }
 
         async function processBatch() {
@@ -160,15 +163,10 @@
             const status = document.getElementById('status');
             const downloadBtn = document.getElementById('downloadBtn');
 
-            if (fileInput.files.length === 0) {
-                alert("Please select one or more PDF files first!");
-                return;
-            }
+            if (fileInput.files.length === 0) { alert("Please select one or more PDF files first!"); return; }
 
             const formData = new FormData();
-            for (let i = 0; i < fileInput.files.length; i++) {
-                formData.append("files", fileInput.files[i]);
-            }
+            for (let i = 0; i < fileInput.files.length; i++) { formData.append("files", fileInput.files[i]); }
 
             extractBtn.disabled = true;
             status.innerText = `Connecting to Render Cloud... Processing ${fileInput.files.length} document(s) via Gemini...`;
@@ -179,12 +177,8 @@
             downloadBtn.style.display = "none";
 
             try {
-                const response = await fetch(`${BACKEND_URL}/extract-batch`, {
-                    method: 'POST',
-                    body: formData
-                });
+                const response = await fetch(`${BACKEND_URL}/extract-batch`, { method: 'POST', body: formData });
                 const result = await response.json();
-                
                 if (response.ok) {
                     batchDataGlobal = result.results;
                     renderOperationalGrid();
@@ -219,7 +213,6 @@
             batchDataGlobal.forEach((item, index) => {
                 const isError = item.policy_no === "ERROR";
                 const rowClass = isError ? "class='error-row'" : "";
-                
                 const cleanGross = cleanIncomingNumber(item.gross_premium);
                 
                 tbody.innerHTML += `
@@ -254,9 +247,7 @@
                 }
             });
             
-            if (errorCount > 0) {
-                consoleBox.style.display = "block";
-            }
+            if (errorCount > 0) { consoleBox.style.display = "block"; }
             
             document.getElementById('resultTable').style.display = "table";
             document.getElementById('downloadBtn').style.display = "inline-block";
@@ -267,7 +258,6 @@
         function extractAgentRosterContext(idx) {
             const val = document.getElementById(`agentInput-${idx}`).value;
             const targetSpan = document.getElementById(`agentIdSpan-${idx}`);
-            
             const matches = val.match(/\[(.*?)\]/);
             if (matches && matches[1]) {
                 targetSpan.innerText = `ID: ${matches[1]}`;
@@ -291,13 +281,11 @@
             
             const outcome = premVal * (rateVal / 100);
             document.getElementById('brokerageCalcCell-' + idx).innerText = outcome.toFixed(2);
-            
             evaluateGridValidation();
         }
 
         function evaluateGridValidation() {
             if (!batchDataGlobal) return;
-            
             const monthSelection = document.getElementById('businessMonth').value;
             const yearSelection = document.getElementById('businessYear').value;
             let checksPassed = true;
@@ -307,13 +295,12 @@
             for (let i = 0; i < batchDataGlobal.length; i++) {
                 const rm = document.getElementById(`rmInput-${i}`).value;
                 const idSpan = document.getElementById(`agentIdSpan-${i}`);
-                // 🔥 FIXED: Standardized parenthesis wrapper bounds for query execution 
-                const agentId = idSpan ? idSpan.getAttribute('data-clean-id') : null;
+                const extractedCleanId = idSpan ? idSpan.getAttribute('data-clean-id') : null;
                 const gross = document.getElementById(`grossInput-${i}`).value;
                 const prem = document.getElementById(`premiumInput-${i}`).value;
                 const rate = document.getElementById(`rateInput-${i}`).value;
                 
-                if (!rm || !agentId || gross === "" || prem === "" || rate === "" || parseFloat(gross) < 0 || parseFloat(prem) < 0 || parseFloat(rate) < 0) {
+                if (!rm || !extractedCleanId || gross === "" || prem === "" || rate === "" || parseFloat(gross) < 0 || parseFloat(prem) < 0 || parseFloat(rate) < 0) {
                     checksPassed = false;
                     break;
                 }
@@ -321,7 +308,6 @@
             
             const alertBanner = document.getElementById('alertBanner');
             const downloadBtn = document.getElementById('downloadBtn');
-            
             if (checksPassed) {
                 alertBanner.style.display = "none";
                 downloadBtn.disabled = false;
@@ -333,7 +319,6 @@
 
         async function downloadBatchExcel() {
             if (!batchDataGlobal) return;
-            
             const month = document.getElementById('businessMonth').value;
             const year = document.getElementById('businessYear').value;
             
@@ -352,8 +337,8 @@
                     policy_start_date: item.policy_start_date,
                     policy_end_date: item.policy_end_date,
                     relationship_manager: document.getElementById(`rmInput-${idx}`).value,
-                    agent_id: idSpan.getAttribute('data-clean-id') || "",
-                    agent_name: idSpan.getAttribute('data-clean-name') || "",
+                    agent_id: idSpan ? (idSpan.getAttribute('data-clean-id') || "") : "",
+                    agent_name: idSpan ? (idSpan.getAttribute('data-clean-name') || "") : "",
                     commissionable_premium: parseFloat(document.getElementById(`premiumInput-${idx}`).value) || 0,
                     brokerage_rate_percent: parseFloat(document.getElementById(`rateInput-${idx}`).value) || 0,
                     calculated_brokerage: parseFloat(document.getElementById('brokerageCalcCell-' + idx).innerText) || 0
@@ -366,7 +351,6 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(structuralPayload)
                 });
-
                 if (response.ok) {
                     const blob = await response.blob();
                     const url = window.URL.createObjectURL(blob);
@@ -376,12 +360,8 @@
                     document.body.appendChild(a);
                     a.click();
                     a.remove();
-                } else {
-                    alert("Failed to generate Excel compilation sheet layout package.");
-                }
-            } catch (error) {
-                alert(`Error downloading workbook stream mapping execution: ${error.message}`);
-            }
+                } else { alert("Failed to generate Excel compilation sheet layout package."); }
+            } catch (error) { alert(`Error downloading workbook stream mapping execution: ${error.message}`); }
         }
     </script>
 </body>
