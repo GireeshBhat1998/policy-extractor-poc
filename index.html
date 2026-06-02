@@ -39,7 +39,7 @@
     <h2>AI Accelerated Batch Policy Extractor</h2>
     
     <div class="card">
-        <h3>1. Assign Global Operational Parameters</h3>
+        <h3>1. Select Sales Period</h3>
         <div class="global-meta-box">
             <div>
                 <label><strong>Business Month:</strong> </label>
@@ -60,7 +60,7 @@
         </div>
 
         <div class="upload-section">
-            <h3>2. Upload Policy PDFs</h3>
+            <h3>2. Upload Policy Copy (PDFs)</h3>
             <input type="file" id="batchFileInput" accept="application/pdf" multiple style="margin-bottom: 15px; display: block;">
             <button id="extractBtn" onclick="processBatch()">Extract All Files</button>
             <div id="status" class="status-message"></div>
@@ -68,7 +68,7 @@
     </div>
 
     <div class="card" id="gridContainer" style="display:none;">
-        <h3>3. Human-in-the-Loop Operational Verification Matrix</h3>
+        <h3>3. Verification Matrix</h3>
         <div id="alertBanner" class="validation-warning">⚠️ Action Required: Please specify the Business Month/Year, assign a valid RM and Agent selection, and log all numerical premium structures for all rows to unlock final spreadsheet compiling capabilities.</div>
         
         <div style="overflow-x: auto;">
@@ -156,7 +156,8 @@
                 if (response.ok) {
                     batchDataGlobal = result.results;
                     renderOperationalGrid();
-                    status.innerText = "Processing completed successfully! Please audit the verification matrix below.";
+                    // Changed visible text 3: Processing completed successfully! Proceed to Verification Matrix
+                    status.innerText = "Processing completed successfully! Proceed to Verification Matrix";
                 } else {
                     status.innerText = `Error: ${result.detail || 'Failed parsing package'}`;
                 }
@@ -243,7 +244,7 @@
             if (rateVal > 100) { rateVal = 100; rateInput.value = 100; }
             
             const outcome = premVal * (rateVal / 100);
-            document.getElementById(`brokerageCalcCell-${idx}`).innerText = outcome.toFixed(2);
+            document.getElementById('brokerageCalcCell-' + idx).innerText = outcome.toFixed(2);
             
             evaluateGridValidation();
         }
@@ -299,7 +300,6 @@
                     customer_name: item.customer_name,
                     product_name: item.product_name,
                     gross_premium: parseFloat(document.getElementById(`grossInput-${idx}`).value) || 0,
-                    // GST values are still passed quietly from the hidden AI storage object directly to the Excel payload mapping
                     gst: cleanIncomingNumber(item.gst),
                     policy_start_date: item.policy_start_date,
                     policy_end_date: item.policy_end_date,
@@ -308,7 +308,7 @@
                     agent_name: idSpan.getAttribute('data-clean-name'),
                     commissionable_premium: parseFloat(document.getElementById(`premiumInput-${idx}`).value) || 0,
                     brokerage_rate_percent: parseFloat(document.getElementById(`rateInput-${idx}`).value) || 0,
-                    calculated_brokerage: parseFloat(document.getElementById(`brokerageCalcCell-${idx}`).innerText) || 0
+                    calculated_brokerage: parseFloat(document.getElementById('brokerageCalcCell-' + idx).innerText) || 0
                 };
             });
 
