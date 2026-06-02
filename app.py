@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv()  # Automatically injects the GEMINI_API_KEY from Render environment settings
 import os
 import io
 import json
@@ -14,6 +14,7 @@ import pandas as pd
 
 app = FastAPI()
 
+# Enable CORS so your local desktop HTML file can talk to the Render Cloud server
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,6 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Define the data contract for extraction
 class PolicyExtraction(BaseModel):
     policy_no: str = Field(description="The unique policy or certificate number")
     insurer_company: str = Field(description="Name of the insurance company")
@@ -31,9 +33,10 @@ class PolicyExtraction(BaseModel):
     policy_start_date: str = Field(description="The risk commencement or start date of the policy")
     policy_end_date: str = Field(description="The expiry or end date of the policy")
 
+# Initialize the Gemini Client
 client = genai.Client()
 
-# 🌐 NEW ENDPOINTS: Read Dynamic Rosters from Git Files local path
+# 🌐 NEW ENDPOINT: Reads dynamic metadata rosters directly from your repository files
 @app.get("/metadata")
 def get_metadata():
     try:
@@ -43,18 +46,23 @@ def get_metadata():
             agents = json.load(f)
         return {"rms": rms, "agents": agents}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed loading lists: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed loading internal rosters: {str(e)}")
 
 @app.post("/extract-batch")
 async def extract_multiple_policies(files: List[UploadFile] = File(...)):
+    """Accepts multiple files, iterates through them, and packages structured responses"""
     combined_results = []
+    
     for file in files:
         if not file.filename.endswith('.pdf'):
-            continue
+            continue  # Skip non-PDF items gracefully
+            
         try:
             pdf_bytes = await file.read()
+            
+            # Call Gemini API to extract data fields natively
             response = client.models.generate_content(
-                model="gemini-2.5-flash-lite", # Highly optimal for structured extractions
+                model="gemini-2.5-flash-lite",
                 contents=[
                     types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
                     "Analyze this insurance policy copy and accurately extract the requested fields mapping them exactly to the schema contract provided."
@@ -65,45 +73,62 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
                     temperature=0.0,
                 ),
             )
+            
+            # Parse response string into a structured dictionary element
             extracted_dict = json.loads(response.text)
-            extracted_dict["source_file"] = file.filename
+            extracted_dict["source_file"] = file.filename  # Attaches filename tracking
             combined_results.append(extracted_dict)
+            
         except Exception as e:
+            # Fallback error row payload if an individual file processing step defaults
             combined_results.append({
-                "policy_no": "ERROR", "insurer_company": "Failed to parse file",
-                "customer_name": f"Error: {str(e)}", "gross_premium": "0", "gst": "0",
+                "policy_no": "ERROR", 
+                "insurer_company": "Failed to parse file",
+                "customer_name": f"Error message: {str(e)}", 
+                "gross_premium": "0", "gst": "0",
                 "product_name": "N/A", "policy_start_date": "N/A", "policy_end_date": "N/A",
                 "source_file": file.filename
             })
+            
     return {"success": True, "results": combined_results}
 
 @app.post("/export-excel-batch")
 async def export_batch_to_excel(data: List[dict]):
+    """Accepts customized operational matrix payloads and compiles a clean spreadsheet report"""
     try:
         df = pd.DataFrame(data)
         
-        # Explicitly order columns for clean corporate reporting
-        order = [
+        # Explicit column sequence framework for standard reconciliation tracking
+        preferred_order = [
             "business_month", "business_year", "source_file", "policy_no", 
-            "insurer_company", "customer_name", "gross_premium", "gst",
-            "relationship_manager", "agent_id", "agent_name", 
-            "commissionable_premium", "brokerage_rate_percent", "calculated_brokerage"
+            "insurer_company", "customer_name", "product_name", "gross_premium", "gst",
+            "policy_start_date", "policy_end_date", "relationship_manager", 
+            "agent_id", "agent_name", "commissionable_premium", 
+            "brokerage_rate_percent", "calculated_brokerage"
         ]
-        # Fallback to keep whatever columns exist safely
-        cols = [c for c in order if c in df.columns] + [c for c in df.columns if c not in order]
-        df = df[cols]
+        
+        # Rearrange dynamic columns safely based on presence filters
+        clean_cols = [c for c in preferred_order if c in df.columns] + [c for c in df.columns if c not in preferred_order]
+        df = df[clean_cols]
 
+        # Format table headers to be user-friendly spaces
         df.columns = [col.replace('_', ' ').title() for col in df.columns]
         
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='Batch Operations Report')
+            df.to_excel(writer, index=False, sheet_name='Batch Operations')
         output.seek(0)
         
-        return StreamingResponse(
-            output, 
-            headers={'Content-Disposition': 'attachment; filename="consolidated_operational_report.xlsx"'}, 
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        headers = {
+            'Content-Disposition': 'attachment; filename="consolidated_policies_report.xlsx"'
+        }
+        return StreamingResponse(output, headers=headers, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+if __name__ == "__main__":
+    import uvicorn
+    # Render cloud binds dynamically using environment ports
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
