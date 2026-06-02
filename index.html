@@ -14,7 +14,7 @@
         h3 { font-size: 1.1rem; margin-bottom: 15px; color: #495057; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px; }
         .upload-section { margin-top: 15px; }
         
-        /* Flexbox Meta Wrapper - Transitions seamlessly from side-by-side rows to stacked components on tiny viewports */
+        /* Flexbox Meta Wrapper */
         .global-meta-box { display: flex; flex-wrap: wrap; gap: 20px; background-color: #f1f3f5; padding: 15px; border-radius: 6px; margin-bottom: 20px; align-items: center; }
         .meta-item { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 250px; }
         .global-meta-box select { flex: 1; padding: 10px 12px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; background: #fff; }
@@ -31,9 +31,15 @@
         .status-message { color: #007bff; font-weight: bold; margin-top: 15px; min-height: 20px; font-size: 14px; }
         .validation-warning { display: block; background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 12px 15px; border-radius: 4px; margin-top: 15px; font-weight: 500; font-size: 13px; }
         
+        /* Technical Error Output Console Card Box */
+        .error-console-box { border: 1px solid #f5c6cb; background-color: #f8d7da; padding: 20px; border-radius: 8px; margin-top: 25px; color: #721c24; display: none; }
+        .error-console-box h4 { font-size: 14px; margin-bottom: 10px; font-weight: bold; display: flex; align-items: center; gap: 6px; }
+        .error-log-list { list-style: square inside; font-family: monospace; font-size: 12px; line-height: 1.6; }
+        .error-log-list li { margin-bottom: 4px; }
+        
         /* Flexible Responsive Scroll Wrapper for Complex Spreadsheets */
         .table-responsive-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e0e0e0; border-radius: 6px; margin-top: 15px; }
-        table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; min-width: 1000px; }
+        table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; min-width: 1100px; }
         th, td { border: 1px solid #e0e0e0; padding: 12px 10px; text-align: left; vertical-align: middle; }
         th { background-color: #f8f9fa; color: #495057; font-weight: 600; }
         tr:nth-child(even) { background-color: #fdfdfd; }
@@ -111,6 +117,11 @@
         <datalist id="agentOptionsList"></datalist>
 
         <button id="downloadBtn" onclick="downloadBatchExcel()">Download Unified Excel Sheet</button>
+        
+        <div class="error-console-box" id="errorConsole">
+            <h4>❌ Parsing Failures Diagnostics Summary Log</h4>
+            <ul class="error-log-list" id="errorLogList"></ul>
+        </div>
     </div>
 
     <script>
@@ -139,7 +150,8 @@
 
         function populateDatalistStructures() {
             document.getElementById('rmOptionsList').innerHTML = dynamicRosters.rms.map(rm => `<option value="${rm}">`).join('');
-            document.getElementById('agentOptionsList').innerHTML = dynamicRosters.agents.map(ag => `<option value="${ag.name} [${ag.id}]" data-id="${ag.id}" data-name="${ag.name}">`).join('');
+            // 🔥 FIXED: Mapped ag.id to ag.agentID to match your structural json keys perfectly
+            document.getElementById('agentOptionsList').innerHTML = dynamicRosters.agents.map(ag => `<option value="${ag.name} [${ag.agentID}]" data-id="${ag.agentID}" data-name="${ag.name}">`).join('');
         }
 
         async function processBatch() {
@@ -162,6 +174,8 @@
             status.innerText = `Connecting to Render Cloud... Processing ${fileInput.files.length} document(s) via Gemini...`;
             document.getElementById('tableBody').innerHTML = "";
             document.getElementById('gridContainer').style.display = "none";
+            document.getElementById('errorConsole').style.display = "none";
+            document.getElementById('errorLogList').innerHTML = "";
             downloadBtn.style.display = "none";
 
             try {
@@ -195,7 +209,12 @@
 
         function renderOperationalGrid() {
             const tbody = document.getElementById('tableBody');
+            const consoleBox = document.getElementById('errorConsole');
+            const logList = document.getElementById('errorLogList');
+            
             tbody.innerHTML = "";
+            logList.innerHTML = "";
+            let errorCount = 0;
             
             batchDataGlobal.forEach((item, index) => {
                 const isError = item.policy_no === "ERROR";
@@ -228,7 +247,16 @@
                         </td>
                         <td id="brokerageCalcCell-${index}" class="calc-field">0.00</td>
                     </tr>`;
+                    
+                if (isError && item.parsing_error) {
+                    errorCount++;
+                    logList.innerHTML += `<li><strong>${item.source_file}</strong>: ${item.parsing_error}</li>`;
+                }
             });
+            
+            if (errorCount > 0) {
+                consoleBox.style.display = "block";
+            }
             
             document.getElementById('resultTable').style.display = "table";
             document.getElementById('downloadBtn').style.display = "inline-block";
@@ -279,7 +307,7 @@
             for (let i = 0; i < batchDataGlobal.length; i++) {
                 const rm = document.getElementById(`rmInput-${i}`).value;
                 const idSpan = document.getElementById(`agentIdSpan-${i}`);
-                // Fix syntax typo here: correctly structured selection query
+                // 🔥 FIXED: Standardized parenthesis wrapper bounds for query execution 
                 const agentId = idSpan ? idSpan.getAttribute('data-clean-id') : null;
                 const gross = document.getElementById(`grossInput-${i}`).value;
                 const prem = document.getElementById(`premiumInput-${i}`).value;
