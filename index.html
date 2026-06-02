@@ -5,33 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Batch Policy Extractor & Operations Grid</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1300px; margin: 40px auto; padding: 0 20px; color: #333; background-color: #fcfcfc; }
-        .card { border: 1px solid #e0e0e0; padding: 24px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-color: #fff; margin-bottom: 25px; }
-        .upload-section { margin-bottom: 10px; }
+        /* Modern Fluid UX Foundation - Auto-scaling padding/widths based on viewport bounds */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; color: #333; background-color: #fcfcfc; line-height: 1.4; }
+        h2 { margin: 15px 0 25px 0; font-size: 1.6rem; text-align: center; color: #111; }
         
-        /* Global Date Select Parameters Layout Styling */
-        .global-meta-box { display: flex; gap: 20px; background-color: #f1f3f5; padding: 15px 20px; border-radius: 6px; margin-bottom: 20px; align-items: center; }
-        .global-meta-box select { padding: 8px 12px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; background: #fff; }
+        .card { border: 1px solid #e0e0e0; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.03); background-color: #fff; margin-bottom: 25px; }
+        h3 { font-size: 1.1rem; margin-bottom: 15px; color: #495057; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px; }
+        .upload-section { margin-top: 15px; }
         
-        button { background-color: #007bff; color: white; border: none; padding: 12px 24px; font-size: 15px; border-radius: 4px; cursor: pointer; margin-right: 10px; font-weight: 500; }
+        /* Flexbox Meta Wrapper - Transitions seamlessly from side-by-side rows to stacked components on tiny viewports */
+        .global-meta-box { display: flex; flex-wrap: wrap; gap: 20px; background-color: #f1f3f5; padding: 15px; border-radius: 6px; margin-bottom: 20px; align-items: center; }
+        .meta-item { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 250px; }
+        .global-meta-box select { flex: 1; padding: 10px 12px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; background: #fff; }
+        
+        input[type="file"] { width: 100%; max-width: 400px; margin-bottom: 15px; display: block; font-size: 14px; }
+        
+        button { background-color: #007bff; color: white; border: none; padding: 12px 24px; font-size: 14px; border-radius: 4px; cursor: pointer; font-weight: 500; transition: background 0.2s ease; width: auto; }
+        button:hover:not(:disabled) { background-color: #0056b3; }
         button:disabled { background-color: #cccccc; cursor: not-allowed; }
-        #downloadBtn { background-color: #28a745; display: none; margin-top: 25px; width: 100%; font-size: 16px; padding: 14px; }
-        .status-message { color: #007bff; font-weight: bold; margin-top: 15px; min-height: 20px; }
         
-        /* Validation Warning Interceptor Elements */
-        .validation-warning { display: block; background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 12px 15px; border-radius: 4px; margin-top: 20px; font-weight: 500; font-size: 14px; }
+        #downloadBtn { background-color: #28a745; display: none; margin-top: 25px; width: 100%; font-size: 16px; padding: 15px; border-radius: 6px; }
+        #downloadBtn:hover:not(:disabled) { background-color: #218838; }
         
-        /* Interactive Spreadsheet Layout Table Configuration */
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; display: none; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 13px; }
-        th, td { border: 1px solid #e0e0e0; padding: 10px 8px; text-align: left; }
+        .status-message { color: #007bff; font-weight: bold; margin-top: 15px; min-height: 20px; font-size: 14px; }
+        .validation-warning { display: block; background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 12px 15px; border-radius: 4px; margin-top: 15px; font-weight: 500; font-size: 13px; }
+        
+        /* Flexible Responsive Scroll Wrapper for Complex Spreadsheets */
+        .table-responsive-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e0e0e0; border-radius: 6px; margin-top: 15px; }
+        table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; min-width: 1000px; /* Protects tabular aspect structures from compressing on mobile */ }
+        th, td { border: 1px solid #e0e0e0; padding: 12px 10px; text-align: left; vertical-align: middle; }
         th { background-color: #f8f9fa; color: #495057; font-weight: 600; }
         tr:nth-child(even) { background-color: #fdfdfd; }
         .error-row { color: #dc3545; font-weight: bold; background-color: #fff5f5 !important; }
         
-        /* Operational Grid Input Optimization Layouts */
-        input[type="text"], input[type="number"] { width: 92%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+        /* UI Input Component Adjustments */
+        input[type="text"], input[type="number"] { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; background-color: #fff; }
+        input[type="text"]:focus, input[type="number"]:focus { border-color: #80bdff; outline: 0; box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25); }
         .calc-field { font-weight: bold; color: #2b2b2b; background-color: #f8f9fa; text-align: right; padding-right: 15px; }
-        .sub-id-label { display: block; font-size: 11px; color: #6c757d; margin-top: 3px; font-family: monospace; }
+        .sub-id-label { display: block; font-size: 11px; color: #6c757d; margin-top: 4px; font-family: monospace; }
+
+        /* Media Screen Query Controls for Mobile-First Display Balancing */
+        @media (max-width: 576px) {
+            body { padding: 10px; }
+            button { width: 100%; text-align: center; }
+            .meta-item { min-width: 100%; }
+        }
     </style>
 </head>
 <body>
@@ -41,8 +60,8 @@
     <div class="card">
         <h3>1. Select Sales Period</h3>
         <div class="global-meta-box">
-            <div>
-                <label><strong>Business Month:</strong> </label>
+            <div class="meta-item">
+                <label style="min-width: 110px;"><strong>Business Month:</strong></label>
                 <select id="businessMonth" onchange="evaluateGridValidation()">
                     <option value="">-- Choose Month --</option>
                     <option value="January">January</option><option value="February">February</option>
@@ -53,15 +72,15 @@
                     <option value="November">November</option><option value="December">December</option>
                 </select>
             </div>
-            <div>
-                <label><strong>Business Year:</strong> </label>
+            <div class="meta-item">
+                <label style="min-width: 100px;"><strong>Business Year:</strong></label>
                 <select id="businessYear" onchange="evaluateGridValidation()"></select>
             </div>
         </div>
 
         <div class="upload-section">
             <h3>2. Upload Policy Copy (PDFs)</h3>
-            <input type="file" id="batchFileInput" accept="application/pdf" multiple style="margin-bottom: 15px; display: block;">
+            <input type="file" id="batchFileInput" accept="application/pdf" multiple>
             <button id="extractBtn" onclick="processBatch()">Extract All Files</button>
             <div id="status" class="status-message"></div>
         </div>
@@ -69,20 +88,20 @@
 
     <div class="card" id="gridContainer" style="display:none;">
         <h3>3. Verification Matrix</h3>
-        <div id="alertBanner" class="validation-warning">⚠️ Action Required: Please specify the Business Month/Year, assign a valid RM and Agent selection, and log all numerical premium structures for all rows to unlock final spreadsheet compiling capabilities.</div>
+        <div id="alertBanner" class="validation-warning">⚠️ Action Required: Please specify the Business Month/Year, assign a valid RM and Agent selection, and log numerical premium values (0 is allowed) to unlock final spreadsheet compiling capabilities.</div>
         
-        <div style="overflow-x: auto;">
+        <div class="table-responsive-wrapper">
             <table id="resultTable">
                 <thead>
                     <tr>
-                        <th style="width: 15%;">Source File</th>
-                        <th style="width: 20%;">Policy & Insurer Context</th>
+                        <th style="width: 14%;">Source File</th>
+                        <th style="width: 18%;">Policy & Insurer Context</th>
                         <th style="width: 16%;">Relationship Manager</th>
                         <th style="width: 16%;">POSP / Agent Search</th>
-                        <th style="width: 13%;">Gross Premium (Editable)</th>
+                        <th style="width: 12%;">Gross Premium (Editable)</th>
                         <th style="width: 12%;">Comm. Premium</th>
-                        <th style="width: 8%;">Brokerage %</th>
-                        <th style="width: 10%;">Calculated Brokerage</th>
+                        <th style="width: 12%;">Brokerage Rate (Grid)</th>
+                        <th style="width: 14%;">Calculated Brokerage (Grid)</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
@@ -156,7 +175,7 @@
                 if (response.ok) {
                     batchDataGlobal = result.results;
                     renderOperationalGrid();
-                    // Changed visible text 3: Processing completed successfully! Proceed to Verification Matrix
+                    // Text update 3: Processing completed successfully! Proceed to Verification Matrix
                     status.innerText = "Processing completed successfully! Proceed to Verification Matrix";
                 } else {
                     status.innerText = `Error: ${result.detail || 'Failed parsing package'}`;
@@ -169,6 +188,7 @@
         }
 
         function cleanIncomingNumber(val) {
+            if (val === 0 || val === "0") return 0;
             if (!val) return 0;
             const stringClean = String(val).replace(/,/g, '').trim();
             const parsed = parseFloat(stringClean);
@@ -260,12 +280,13 @@
             
             for (let i = 0; i < batchDataGlobal.length; i++) {
                 const rm = document.getElementById(`rmInput-${i}`).value;
-                const agentId = document.getElementById(`agentIdSpan-${i}`).getAttribute('data-clean-id');
+                const agentId = document.getElementById(`agentIdSpan-${i}).getAttribute('data-clean-id')`);
                 const gross = document.getElementById(`grossInput-${i}`).value;
                 const prem = document.getElementById(`premiumInput-${i}`).value;
                 const rate = document.getElementById(`rateInput-${i}`).value;
                 
-                if (!rm || !agentId || !gross || !prem || !rate || parseFloat(prem) < 0 || parseFloat(rate) < 0) {
+                // Adjustment: inputs are validated as complete even if values equal literal 0 string loops
+                if (!rm || !agentId || gross === "" || prem === "" || rate === "" || parseFloat(gross) < 0 || parseFloat(prem) < 0 || parseFloat(rate) < 0) {
                     checksPassed = false;
                     break;
                 }
@@ -304,8 +325,8 @@
                     policy_start_date: item.policy_start_date,
                     policy_end_date: item.policy_end_date,
                     relationship_manager: document.getElementById(`rmInput-${idx}`).value,
-                    agent_id: idSpan.getAttribute('data-clean-id'),
-                    agent_name: idSpan.getAttribute('data-clean-name'),
+                    agent_id: idSpan.getAttribute('data-clean-id') || "",
+                    agent_name: idSpan.getAttribute('data-clean-name') || "",
                     commissionable_premium: parseFloat(document.getElementById(`premiumInput-${idx}`).value) || 0,
                     brokerage_rate_percent: parseFloat(document.getElementById(`rateInput-${idx}`).value) || 0,
                     calculated_brokerage: parseFloat(document.getElementById('brokerageCalcCell-' + idx).innerText) || 0
