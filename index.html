@@ -75,13 +75,12 @@
             <table id="resultTable">
                 <thead>
                     <tr>
-                        <th style="width: 12%;">Source File</th>
-                        <th style="width: 16%;">Policy & Insurer Context</th>
-                        <th style="width: 15%;">Relationship Manager</th>
-                        <th style="width: 15%;">POSP / Agent Search</th>
-                        <th style="width: 12%;">Gross Premium (Editable)</th>
-                        <th style="width: 10%;">GST Amount (Editable)</th>
-                        <th style="width: 10%;">Comm. Premium</th>
+                        <th style="width: 15%;">Source File</th>
+                        <th style="width: 20%;">Policy & Insurer Context</th>
+                        <th style="width: 16%;">Relationship Manager</th>
+                        <th style="width: 16%;">POSP / Agent Search</th>
+                        <th style="width: 13%;">Gross Premium (Editable)</th>
+                        <th style="width: 12%;">Comm. Premium</th>
                         <th style="width: 8%;">Brokerage %</th>
                         <th style="width: 10%;">Calculated Brokerage</th>
                     </tr>
@@ -102,7 +101,6 @@
         
         const BACKEND_URL = "https://policy-extractor.onrender.com"; 
 
-        // Auto-configure calendar selections on window boot initialization rules
         window.addEventListener('DOMContentLoaded', async () => {
             const yearDropdown = document.getElementById('businessYear');
             const targetYear = new Date().getFullYear();
@@ -171,7 +169,6 @@
 
         function cleanIncomingNumber(val) {
             if (!val) return 0;
-            // Converts to string, strips out formatting commas, and parses properly
             const stringClean = String(val).replace(/,/g, '').trim();
             const parsed = parseFloat(stringClean);
             return isNaN(parsed) ? 0 : parsed;
@@ -185,9 +182,7 @@
                 const isError = item.policy_no === "ERROR";
                 const rowClass = isError ? "class='error-row'" : "";
                 
-                // Safely sanitize commas out before embedding values into the numeric inputs
                 const cleanGross = cleanIncomingNumber(item.gross_premium);
-                const cleanGst = cleanIncomingNumber(item.gst);
                 
                 tbody.innerHTML += `
                     <tr ${rowClass}>
@@ -205,9 +200,6 @@
                         </td>
                         <td>
                             <input type="number" id="grossInput-${index}" value="${cleanGross}" step="0.01" oninput="evaluateGridValidation()">
-                        </td>
-                        <td>
-                            <input type="number" id="gstInput-${index}" value="${cleanGst}" step="0.01" oninput="evaluateGridValidation()">
                         </td>
                         <td>
                             <input type="number" id="premiumInput-${index}" placeholder="0.00" step="0.01" oninput="executeLiveRowMath(${index})">
@@ -269,11 +261,10 @@
                 const rm = document.getElementById(`rmInput-${i}`).value;
                 const agentId = document.getElementById(`agentIdSpan-${i}`).getAttribute('data-clean-id');
                 const gross = document.getElementById(`grossInput-${i}`).value;
-                const gst = document.getElementById(`gstInput-${i}`).value;
                 const prem = document.getElementById(`premiumInput-${i}`).value;
                 const rate = document.getElementById(`rateInput-${i}`).value;
                 
-                if (!rm || !agentId || !gross || !gst || !prem || !rate || parseFloat(prem) < 0 || parseFloat(rate) < 0) {
+                if (!rm || !agentId || !gross || !prem || !rate || parseFloat(prem) < 0 || parseFloat(rate) < 0) {
                     checksPassed = false;
                     break;
                 }
@@ -307,9 +298,9 @@
                     insurer_company: item.insurer_company,
                     customer_name: item.customer_name,
                     product_name: item.product_name,
-                    // Pulls the live updated user inputs rather than the raw static text definitions
                     gross_premium: parseFloat(document.getElementById(`grossInput-${idx}`).value) || 0,
-                    gst: parseFloat(document.getElementById(`gstInput-${idx}`).value) || 0,
+                    // GST values are still passed quietly from the hidden AI storage object directly to the Excel payload mapping
+                    gst: cleanIncomingNumber(item.gst),
                     policy_start_date: item.policy_start_date,
                     policy_end_date: item.policy_end_date,
                     relationship_manager: document.getElementById(`rmInput-${idx}`).value,
