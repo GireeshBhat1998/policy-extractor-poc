@@ -3,156 +3,282 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Batch Policy Extractor</title>
+    <title>Enterprise Policy Processing Grid</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 950px; margin: 40px auto; padding: 0 20px; color: #333; }
-        .card { border: 1px solid #e0e0e0; padding: 24px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-color: #fff; }
-        .upload-section { margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 20px; }
-        button { background-color: #007bff; color: white; border: none; padding: 12px 24px; font-size: 15px; border-radius: 4px; cursor: pointer; margin-right: 10px; font-weight: 500; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1200px; margin: 30px auto; padding: 0 20px; color: #333; background-color: #f8f9fa; }
+        .card { border: 1px solid #e0e0e0; padding: 24px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-color: #fff; margin-bottom: 20px; }
+        .batch-meta-section { display: flex; gap: 20px; align-items: center; background-color: #e9ecef; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
+        .batch-meta-section select { padding: 8px 12px; font-size: 14px; border-radius: 4px; border: 1px solid #ccc; }
+        button { background-color: #007bff; color: white; border: none; padding: 12px 24px; font-size: 15px; border-radius: 4px; cursor: pointer; font-weight: 500; }
         button:disabled { background-color: #cccccc; cursor: not-allowed; }
-        #downloadBtn { background-color: #28a745; display: none; margin-top: 20px; }
-        .status-message { color: #007bff; font-weight: bold; margin-top: 15px; min-height: 20px; }
+        #downloadBtn { background-color: #28a745; margin-top: 25px; width: 100%; font-size: 16px; padding: 15px; }
+        .status-message { color: #007bff; font-weight: bold; margin-top: 15px; }
+        .warning-banner { color: #dc3545; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 12px; border-radius: 4px; margin-top: 15px; display: none; font-weight: 500; }
         
-        /* Interactive Data Table Layout */
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; display: none; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        th, td { border: 1px solid #e0e0e0; padding: 12px 15px; text-align: left; font-size: 14px; }
-        th { background-color: #f8f9fa; color: #495057; font-weight: 600; }
-        tr:nth-child(even) { background-color: #fdfdfd; }
-        .error-row { color: #dc3545; font-weight: bold; background-color: #fff5f5 !important; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 13px; }
+        th, td { border: 1px solid #e0e0e0; padding: 10px 8px; text-align: left; }
+        th { background-color: #f1f3f5; color: #495057; font-weight: 600; }
+        input[type="number"], input[type="text"] { width: 90%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+        .calculated-cell { font-weight: bold; color: #495057; background-color: #f8f9fa; text-align: right; padding-right: 15px; }
+        .agent-id-span { display: block; font-size: 11px; color: #6c757d; margin-top: 2px; font-family: monospace; }
     </style>
 </head>
 <body>
 
-    <h2>AI Accelerated Batch Policy Extractor</h2>
+    <h2>AI Batch Extraction & Operational Verification Grid</h2>
+    
     <div class="card">
-        <div class="upload-section">
-            <h3>1. Upload Policy PDFs</h3>
-            <input type="file" id="batchFileInput" accept="application/pdf" multiple style="margin-bottom: 15px; display: block;">
-            <button id="extractBtn" onclick="processBatch()">Extract All Files</button>
-            <div id="status" class="status-message"></div>
+        <h3>1. Global Batch Parameters</h3>
+        <div class="batch-meta-section">
+            <div>
+                <label><strong>Business Month:</strong> </label>
+                <select id="batchMonth" onchange="validateFormStatus()">
+                    <option value="">-- Choose Month --</option>
+                    <option value="January">January</option><option value="February">February</option>
+                    <option value="March">March</option><option value="April">April</option>
+                    <option value="May">May</option><option value="June">June</option>
+                    <option value="July">July</option><option value="August">August</option>
+                    <option value="September">September</option><option value="October">October</option>
+                    <option value="November">November</option><option value="December">December</option>
+                </select>
+            </div>
+            <div>
+                <label><strong>Business Year:</strong> </label>
+                <select id="batchYear" onchange="validateFormStatus()"></select>
+            </div>
         </div>
 
-        <div class="result-section">
-            <h3>2. Extracted Data Matrix Preview</h3>
-            
-            <table id="resultTable">
+        <h3>2. Upload and Parse Policy Files</h3>
+        <input type="file" id="batchFileInput" accept="application/pdf" multiple style="margin-bottom: 15px; display: block;">
+        <button id="extractBtn" onclick="processBatch()">Extract Raw Data Stacks</button>
+        <div id="status" class="status-message"></div>
+    </div>
+
+    <div id="previewCard" class="card" style="display: none;">
+        <h3>3. Human-in-the-Loop Validation Grid</h3>
+        <div id="warningText" class="warning-banner">⚠️ Form Incomplete: Please assign an RM, Agent, and valid numerical metrics to all records to enable download export channels.</div>
+        
+        <div style="overflow-x: auto;">
+            <table>
                 <thead>
                     <tr>
                         <th>Source File</th>
-                        <th>Policy No</th>
-                        <th>Insurer Company</th>
-                        <th>Customer Name</th>
-                        <th>Gross Premium</th>
-                        <th>GST Amount</th>
+                        <th>Policy No / Insurer</th>
+                        <th>Relationship Manager</th>
+                        <th>POSP / Agent Search</th>
+                        <th>Commissionable Prem</th>
+                        <th>Brokerage % (0-100)</th>
+                        <th>Calculated Brokerage</th>
                     </tr>
                 </thead>
-                <tbody id="tableBody">
-                    </tbody>
+                <tbody id="tableBody"></tbody>
             </table>
-
-            <button id="downloadBtn" onclick="downloadBatchExcel()">Download Unified Excel Sheet</button>
         </div>
+
+        <datalist id="rmDataList"></datalist>
+        <datalist id="agentDataList"></datalist>
+
+        <button id="downloadBtn" onclick="generateReport()" disabled>Generate and Download Excel Report</button>
     </div>
 
     <script>
         let batchDataGlobal = null;
-        
-        // ⚠️ CRITICAL: Replace this placeholder string with your live Render URL address
-        // Ensure it contains NO trailing slash at the end (e.g., "https://policy-extractor.onrender.com")
+        let backendLists = { rms: [], agents: [] };
         const BACKEND_URL = "https://policy-extractor.onrender.com"; 
+
+        // Auto-populate Calendar drop-down loops on initialization (2 past years, current year, 1 future year)
+        window.addEventListener('DOMContentLoaded', async () => {
+            const yearSelect = document.getElementById('batchYear');
+            const currentYear = new Date().getFullYear();
+            yearSelect.innerHTML = '<option value="">-- Choose Year --</option>';
+            for(let y = currentYear - 2; y <= currentYear + 1; y++) {
+                yearSelect.innerHTML += `<option value="${y}">${y}</option>`;
+            }
+            
+            // Fetch RM & Agent list collections securely from the server
+            try {
+                const res = await fetch(`${BACKEND_URL}/metadata`);
+                if(res.ok) {
+                    backendLists = await res.getjson ? await res.json() : await res.clone().json();
+                    buildDataLists();
+                }
+            } catch(e) { console.error("Roster compilation failed:", e); }
+        });
+
+        function buildDataLists() {
+            document.getElementById('rmDataList').innerHTML = backendLists.rms.map(rm => `<option value="${rm}">`).join('');
+            document.getElementById('agentDataList').innerHTML = backendLists.agents.map(a => `<option value="${a.name} [${a.id}]" data-id="${a.id}" data-name="${a.name}">`).join('');
+        }
 
         async function processBatch() {
             const fileInput = document.getElementById('batchFileInput');
-            const extractBtn = document.getElementById('extractBtn');
-            const status = document.getElementById('status');
-            const table = document.getElementById('resultTable');
-            const tbody = document.getElementById('tableBody');
-            const downloadBtn = document.getElementById('downloadBtn');
-
-            if (fileInput.files.length === 0) {
-                alert("Please select one or more PDF files first!");
-                return;
-            }
+            if (fileInput.files.length === 0) { alert("Please select files first!"); return; }
 
             const formData = new FormData();
-            // Loop through selected file elements and append them to array key matches
-            for (let i = 0; i < fileInput.files.length; i++) {
-                formData.append("files", fileInput.files[i]);
-            }
+            for (let i = 0; i < fileInput.files.length; i++) formData.append("files", fileInput.files[i]);
 
-            // Adjust interface active component visibility
-            extractBtn.disabled = true;
-            status.innerText = `Connecting to Render Cloud... Processing ${fileInput.files.length} document(s) via Gemini...`;
-            tbody.innerHTML = "";
-            table.style.display = "none";
-            downloadBtn.style.display = "none";
-
+            document.getElementById('extractBtn').disabled = true;
+            document.getElementById('status').innerText = "Running AI core parsing engine... please wait...";
+            
             try {
-                const response = await fetch(`${BACKEND_URL}/extract-batch`, {
-                    method: 'POST',
-                    body: formData
-                });
-
+                const response = await fetch(`${BACKEND_URL}/extract-batch`, { method: 'POST', body: formData });
                 const result = await response.json();
-                
                 if (response.ok) {
                     batchDataGlobal = result.results;
-                    
-                    // Loop through the data blocks array and construct a data grid on screen
-                    batchDataGlobal.forEach(item => {
-                        const isError = item.policy_no === "ERROR";
-                        const rowClass = isError ? "class='error-row'" : "";
-                        
-                        tbody.innerHTML += `
-                            <tr ${rowClass}>
-                                <td>${item.source_file || 'Unknown'}</td>
-                                <td>${item.policy_no}</td>
-                                <td>${item.insurer_company}</td>
-                                <td>${item.customer_name}</td>
-                                <td>${item.gross_premium}</td>
-                                <td>${item.gst}</td>
-                            </tr>`;
-                    });
-                    
-                    status.innerText = "Processing completed successfully!";
-                    table.style.display = "table";
-                    downloadBtn.style.display = "inline-block";
-                } else {
-                    status.innerText = `Error: ${result.detail || 'Failed parsing package'}`;
+                    renderValidationGrid();
+                } else { alert("AI core tracking error."); }
+            } catch (error) { alert("Network routing exception."); }
+            finally { document.getElementById('extractBtn').disabled = false; }
+        }
+
+        function renderValidationGrid() {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = "";
+            
+            batchDataGlobal.forEach((item, index) => {
+                tbody.innerHTML += `
+                    <tr id="row-${index}">
+                        <td><strong>${item.source_file || 'File'}</strong></td>
+                        <td>
+                            <div>${item.policy_no}</div>
+                            <small style="color:#6c757d">${item.insurer_company}</small>
+                        </td>
+                        <td>
+                            <input type="text" list="rmDataList" id="rm-${index}" placeholder="Search RM..." oninput="validateFormStatus()">
+                        </td>
+                        <td>
+                            <input type="text" list="agentDataList" id="agent-${index}" placeholder="Search Name or ID..." oninput="updateAgentId(${index})">
+                            <span id="agentIdDisplay-${index}" class="agent-id-span">ID: Unassigned</span>
+                        </td>
+                        <td>
+                            <input type="number" id="prem-${index}" placeholder="0.00" step="0.01" oninput="calculateRow(${index})">
+                        </td>
+                        <td>
+                            <input type="number" id="rate-${index}" placeholder="%" min="0" max="100" step="0.1" oninput="calculateRow(${index})">
+                        </td>
+                        <td id="calc-${index}" class="calculated-cell">0.00</td>
+                    </tr>`;
+            });
+            
+            document.getElementById('status').innerText = "Data matrix loaded successfully.";
+            document.getElementById('previewCard').style.display = "block";
+            validateFormStatus();
+        }
+
+        // Live Cross-Referencing ID extractor helper logic
+        function updateAgentId(index) {
+            const val = document.getElementById(`agent-${index}`).value;
+            const displaySpan = document.getElementById(`agentIdDisplay-${index}`);
+            
+            // Match the selection format string pattern: "Name [ID]"
+            const match = val.match(/\[(.*?)\]/);
+            if(match && match[1]) {
+                displaySpan.innerText = `ID: ${match[1]}`;
+                displaySpan.setAttribute('data-clean-id', match[1]);
+                displaySpan.setAttribute('data-clean-name', val.split(' [')[0]);
+            } else {
+                displaySpan.innerText = "ID: Unassigned";
+                displaySpan.removeAttribute('data-clean-id');
+                displaySpan.removeAttribute('data-clean-name');
+            }
+            validateFormStatus();
+        }
+
+        // Real-Time Calculation Engine with 0-100% Boundary Constraint Lockout
+        function calculateRow(index) {
+            const premInput = document.getElementById(`prem-${index}`);
+            const rateInput = document.getElementById(`rate-${index}`);
+            const calcCell = document.getElementById(`calc-${index}`);
+            
+            let premium = parseFloat(premInput.value) || 0;
+            let rate = parseFloat(rateInput.value) || 0;
+            
+            // Boundary enforcement guard checks
+            if(rate < 0) { rate = 0; rateInput.value = 0; }
+            if(rate > 100) { rate = 100; rateInput.value = 100; }
+            
+            const brokerage = premium * (rate / 100);
+            calcCell.innerText = brokerage.toFixed(2); // Auto-rounds strictly to two decimal points
+            
+            validateFormStatus();
+        }
+
+        // Deep Validation Evaluation State Machine Block
+        function validateFormStatus() {
+            if(!batchDataGlobal) return;
+            
+            const month = document.getElementById('batchMonth').value;
+            const year = document.getElementById('batchYear').value;
+            let allValid = true;
+            
+            if(!month || !year) allValid = false;
+            
+            for(let i = 0; i < batchDataGlobal.length; i++) {
+                const rm = document.getElementById(`rm-${i}`).value;
+                const agentId = document.getElementById(`agentIdDisplay-${i}`).getAttribute('data-clean-id');
+                const prem = document.getElementById(`prem-${i}`).value;
+                const rate = document.getElementById(`rate-${i}`).value;
+                
+                if(!rm || !agentId || !prem || !rate || parseFloat(prem) <= 0 || parseFloat(rate) < 0) {
+                    allValid = false;
+                    break;
                 }
-            } catch (error) {
-                status.innerText = `Failed to connect to backend service: ${error.message}`;
-            } finally {
-                extractBtn.disabled = false;
+            }
+            
+            const warningBanner = document.getElementById('warningText');
+            const downloadBtn = document.getElementById('downloadBtn');
+            
+            if(allValid) {
+                warningBanner.style.display = "none";
+                downloadBtn.disabled = false;
+            } else {
+                warningBanner.style.display = "block";
+                downloadBtn.disabled = true;
             }
         }
 
-        async function downloadBatchExcel() {
-            if (!batchDataGlobal) return;
-            const status = document.getElementById('status');
+        async function generateReport() {
+            const month = document.getElementById('batchMonth').value;
+            const year = document.getElementById('batchYear').value;
+            
+            // Packaging and map-compiling row objects to deliver to backend
+            const finalPayload = batchDataGlobal.map((item, i) => {
+                const agentSpan = document.getElementById(`agentIdDisplay-${i}`);
+                return {
+                    business_month: month,
+                    business_year: year,
+                    source_file: item.source_file,
+                    policy_no: item.policy_no,
+                    insurer_company: item.insurer_company,
+                    customer_name: item.customer_name,
+                    gross_premium: parseFloat(item.gross_premium) || 0,
+                    gst: parseFloat(item.gst) || 0,
+                    relationship_manager: document.getElementById(`rm-${i}`).value,
+                    agent_id: agentSpan.getAttribute('data-clean-id'),
+                    agent_name: agentSpan.getAttribute('data-clean-name'),
+                    commissionable_premium: parseFloat(document.getElementById(`prem-${i}`).value) || 0,
+                    brokerage_rate_percent: parseFloat(document.getElementById(`rate-${i}`).value) || 0,
+                    calculated_brokerage: parseFloat(document.getElementById(`calc-${i}`).innerText) || 0
+                };
+            });
 
             try {
                 const response = await fetch(`${BACKEND_URL}/export-excel-batch`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(batchDataGlobal)
+                    body: JSON.stringify(finalPayload)
                 });
-
                 if (response.ok) {
                     const blob = await response.blob();
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = "consolidated_policies_report.xlsx";
+                    a.download = `Operational_Report_${month}_${year}.xlsx`;
                     document.body.appendChild(a);
                     a.click();
                     a.remove();
-                } else {
-                    alert("Failed to generate Excel spreadsheet compilation.");
-                }
-            } catch (error) {
-                alert(`Error downloading report workbook: ${error.message}`);
-            }
+                } else { alert("Failed generation routine."); }
+            } catch (e) { alert("Error downloading target build package."); }
         }
     </script>
 </body>
