@@ -33,7 +33,7 @@
         
         /* Flexible Responsive Scroll Wrapper for Complex Spreadsheets */
         .table-responsive-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e0e0e0; border-radius: 6px; margin-top: 15px; }
-        table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; min-width: 1000px; /* Protects tabular aspect structures from compressing on mobile */ }
+        table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; min-width: 1000px; }
         th, td { border: 1px solid #e0e0e0; padding: 12px 10px; text-align: left; vertical-align: middle; }
         th { background-color: #f8f9fa; color: #495057; font-weight: 600; }
         tr:nth-child(even) { background-color: #fdfdfd; }
@@ -45,7 +45,6 @@
         .calc-field { font-weight: bold; color: #2b2b2b; background-color: #f8f9fa; text-align: right; padding-right: 15px; }
         .sub-id-label { display: block; font-size: 11px; color: #6c757d; margin-top: 4px; font-family: monospace; }
 
-        /* Media Screen Query Controls for Mobile-First Display Balancing */
         @media (max-width: 576px) {
             body { padding: 10px; }
             button { width: 100%; text-align: center; }
@@ -280,6 +279,7 @@
             for (let i = 0; i < batchDataGlobal.length; i++) {
                 const rm = document.getElementById(`rmInput-${i}`).value;
                 const idSpan = document.getElementById(`agentIdSpan-${i}`);
+                // Fix syntax typo here: correctly structured selection query
                 const agentId = idSpan ? idSpan.getAttribute('data-clean-id') : null;
                 const gross = document.getElementById(`grossInput-${i}`).value;
                 const prem = document.getElementById(`premiumInput-${i}`).value;
