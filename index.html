@@ -3,36 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enterprise Policy Processing Grid</title>
+    <title>AI Batch Policy Extractor & Operations Grid</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1200px; margin: 30px auto; padding: 0 20px; color: #333; background-color: #f8f9fa; }
-        .card { border: 1px solid #e0e0e0; padding: 24px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-color: #fff; margin-bottom: 20px; }
-        .batch-meta-section { display: flex; gap: 20px; align-items: center; background-color: #e9ecef; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
-        .batch-meta-section select { padding: 8px 12px; font-size: 14px; border-radius: 4px; border: 1px solid #ccc; }
-        button { background-color: #007bff; color: white; border: none; padding: 12px 24px; font-size: 15px; border-radius: 4px; cursor: pointer; font-weight: 500; }
-        button:disabled { background-color: #cccccc; cursor: not-allowed; }
-        #downloadBtn { background-color: #28a745; margin-top: 25px; width: 100%; font-size: 16px; padding: 15px; }
-        .status-message { color: #007bff; font-weight: bold; margin-top: 15px; }
-        .warning-banner { color: #dc3545; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 12px; border-radius: 4px; margin-top: 15px; display: none; font-weight: 500; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1200px; margin: 40px auto; padding: 0 20px; color: #333; background-color: #fcfcfc; }
+        .card { border: 1px solid #e0e0e0; padding: 24px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); background-color: #fff; margin-bottom: 25px; }
+        .upload-section { margin-bottom: 10px; }
         
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 13px; }
+        /* Global Date Select Parameters Layout Styling */
+        .global-meta-box { display: flex; gap: 20px; background-color: #f1f3f5; padding: 15px 20px; border-radius: 6px; margin-bottom: 20px; align-items: center; }
+        .global-meta-box select { padding: 8px 12px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; background: #fff; }
+        
+        button { background-color: #007bff; color: white; border: none; padding: 12px 24px; font-size: 15px; border-radius: 4px; cursor: pointer; margin-right: 10px; font-weight: 500; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
+        #downloadBtn { background-color: #28a745; display: none; margin-top: 25px; width: 100%; font-size: 16px; padding: 14px; }
+        .status-message { color: #007bff; font-weight: bold; margin-top: 15px; min-height: 20px; }
+        
+        /* Validation Warning Interceptor Elements */
+        .validation-warning { display: block; background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 12px 15px; border-radius: 4px; margin-top: 20px; font-weight: 500; font-size: 14px; }
+        
+        /* Interactive Spreadsheet Layout Table Configuration */
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; display: none; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 13px; }
         th, td { border: 1px solid #e0e0e0; padding: 10px 8px; text-align: left; }
-        th { background-color: #f1f3f5; color: #495057; font-weight: 600; }
-        input[type="number"], input[type="text"] { width: 90%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
-        .calculated-cell { font-weight: bold; color: #495057; background-color: #f8f9fa; text-align: right; padding-right: 15px; }
-        .agent-id-span { display: block; font-size: 11px; color: #6c757d; margin-top: 2px; font-family: monospace; }
+        th { background-color: #f8f9fa; color: #495057; font-weight: 600; }
+        tr:nth-child(even) { background-color: #fdfdfd; }
+        .error-row { color: #dc3545; font-weight: bold; background-color: #fff5f5 !important; }
+        
+        /* Operational Grid Input Optimization Layouts */
+        input[type="text"], input[type="number"] { width: 92%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+        .calc-field { font-weight: bold; color: #2b2b2b; background-color: #f8f9fa; text-align: right; padding-right: 15px; }
+        .sub-id-label { display: block; font-size: 11px; color: #6c757d; margin-top: 3px; font-family: monospace; }
     </style>
 </head>
 <body>
 
-    <h2>AI Batch Extraction & Operational Verification Grid</h2>
+    <h2>AI Accelerated Batch Policy Extractor</h2>
     
     <div class="card">
-        <h3>1. Global Batch Parameters</h3>
-        <div class="batch-meta-section">
+        <h3>1. Assign Global Operational Parameters</h3>
+        <div class="global-meta-box">
             <div>
                 <label><strong>Business Month:</strong> </label>
-                <select id="batchMonth" onchange="validateFormStatus()">
+                <select id="businessMonth" onchange="evaluateGridValidation()">
                     <option value="">-- Choose Month --</option>
                     <option value="January">January</option><option value="February">February</option>
                     <option value="March">March</option><option value="April">April</option>
@@ -44,206 +55,236 @@
             </div>
             <div>
                 <label><strong>Business Year:</strong> </label>
-                <select id="batchYear" onchange="validateFormStatus()"></select>
+                <select id="businessYear" onchange="evaluateGridValidation()"></select>
             </div>
         </div>
 
-        <h3>2. Upload and Parse Policy Files</h3>
-        <input type="file" id="batchFileInput" accept="application/pdf" multiple style="margin-bottom: 15px; display: block;">
-        <button id="extractBtn" onclick="processBatch()">Extract Raw Data Stacks</button>
-        <div id="status" class="status-message"></div>
+        <div class="upload-section">
+            <h3>2. Upload Policy PDFs</h3>
+            <input type="file" id="batchFileInput" accept="application/pdf" multiple style="margin-bottom: 15px; display: block;">
+            <button id="extractBtn" onclick="processBatch()">Extract All Files</button>
+            <div id="status" class="status-message"></div>
+        </div>
     </div>
 
-    <div id="previewCard" class="card" style="display: none;">
-        <h3>3. Human-in-the-Loop Validation Grid</h3>
-        <div id="warningText" class="warning-banner">⚠️ Form Incomplete: Please assign an RM, Agent, and valid numerical metrics to all records to enable download export channels.</div>
+    <div class="card" id="gridContainer" style="display:none;">
+        <h3>3. Human-in-the-Loop Operational Verification Matrix</h3>
+        <div id="alertBanner" class="validation-warning">⚠️ Action Required: Please specify the Business Month/Year, assign a valid RM and Agent selection, and log all numerical premium structures for all rows to unlock final spreadsheet compiling capabilities.</div>
         
         <div style="overflow-x: auto;">
-            <table>
+            <table id="resultTable">
                 <thead>
                     <tr>
-                        <th>Source File</th>
-                        <th>Policy No / Insurer</th>
-                        <th>Relationship Manager</th>
-                        <th>POSP / Agent Search</th>
-                        <th>Commissionable Prem</th>
-                        <th>Brokerage % (0-100)</th>
-                        <th>Calculated Brokerage</th>
+                        <th style="width: 15%;">Source File</th>
+                        <th style="width: 20%;">Policy & Insurer Context</th>
+                        <th style="width: 18%;">Relationship Manager</th>
+                        <th style="width: 18%;">POSP / Agent Search</th>
+                        <th style="width: 12%;">Comm. Premium</th>
+                        <th style="width: 8%;">Brokerage %</th>
+                        <th style="width: 9%;">Calculated Brokerage</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
             </table>
         </div>
 
-        <datalist id="rmDataList"></datalist>
-        <datalist id="agentDataList"></datalist>
+        <datalist id="rmOptionsList"></datalist>
+        <datalist id="agentOptionsList"></datalist>
 
-        <button id="downloadBtn" onclick="generateReport()" disabled>Generate and Download Excel Report</button>
+        <button id="downloadBtn" onclick="downloadBatchExcel()">Download Unified Excel Sheet</button>
     </div>
 
     <script>
         let batchDataGlobal = null;
-        let backendLists = { rms: [], agents: [] };
+        let dynamicRosters = { rms: [], agents: [] };
+        
         const BACKEND_URL = "https://policy-extractor.onrender.com"; 
 
-        // Auto-populate Calendar drop-down loops on initialization (2 past years, current year, 1 future year)
+        // Auto-configure calendar selections on window boot initialization rules
         window.addEventListener('DOMContentLoaded', async () => {
-            const yearSelect = document.getElementById('batchYear');
-            const currentYear = new Date().getFullYear();
-            yearSelect.innerHTML = '<option value="">-- Choose Year --</option>';
-            for(let y = currentYear - 2; y <= currentYear + 1; y++) {
-                yearSelect.innerHTML += `<option value="${y}">${y}</option>`;
-            }
+            const yearDropdown = document.getElementById('businessYear');
+            const targetYear = new Date().getFullYear();
+            yearDropdown.innerHTML = '<option value="">-- Choose Year --</option>';
             
-            // Fetch RM & Agent list collections securely from the server
+            // Loop dynamically injects 2 past years, current year, and 1 future year options
+            for (let y = targetYear - 2; y <= targetYear + 1; y++) {
+                yearDropdown.innerHTML += `<option value="${y}">${y}</option>`;
+            }
+
+            // Securely stream dynamic lists down from backend JSON storage allocations
             try {
-                const res = await fetch(`${BACKEND_URL}/metadata`);
-                if(res.ok) {
-                    backendLists = await res.getjson ? await res.json() : await res.clone().json();
-                    buildDataLists();
+                const response = await fetch(`${BACKEND_URL}/metadata`);
+                if (response.ok) {
+                    dynamicRosters = await response.json();
+                    populateDatalistStructures();
                 }
-            } catch(e) { console.error("Roster compilation failed:", e); }
+            } catch (err) { console.error("Roster synchronization breakdown exception: ", err); }
         });
 
-        function buildDataLists() {
-            document.getElementById('rmDataList').innerHTML = backendLists.rms.map(rm => `<option value="${rm}">`).join('');
-            document.getElementById('agentDataList').innerHTML = backendLists.agents.map(a => `<option value="${a.name} [${a.id}]" data-id="${a.id}" data-name="${a.name}">`).join('');
+        function populateDatalistStructures() {
+            document.getElementById('rmOptionsList').innerHTML = dynamicRosters.rms.map(rm => `<option value="${rm}">`).join('');
+            document.getElementById('agentOptionsList').innerHTML = dynamicRosters.agents.map(ag => `<option value="${ag.name} [${ag.id}]" data-id="${ag.id}" data-name="${ag.name}">`).join('');
         }
 
         async function processBatch() {
             const fileInput = document.getElementById('batchFileInput');
-            if (fileInput.files.length === 0) { alert("Please select files first!"); return; }
+            const extractBtn = document.getElementById('extractBtn');
+            const status = document.getElementById('status');
+            const downloadBtn = document.getElementById('downloadBtn');
+
+            if (fileInput.files.length === 0) {
+                alert("Please select one or more PDF files first!");
+                return;
+            }
 
             const formData = new FormData();
-            for (let i = 0; i < fileInput.files.length; i++) formData.append("files", fileInput.files[i]);
+            for (let i = 0; i < fileInput.files.length; i++) {
+                formData.append("files", fileInput.files[i]);
+            }
 
-            document.getElementById('extractBtn').disabled = true;
-            document.getElementById('status').innerText = "Running AI core parsing engine... please wait...";
-            
+            extractBtn.disabled = true;
+            status.innerText = `Connecting to Render Cloud... Processing ${fileInput.files.length} document(s) via Gemini...`;
+            document.getElementById('tableBody').innerHTML = "";
+            document.getElementById('gridContainer').style.display = "none";
+            downloadBtn.style.display = "none";
+
             try {
-                const response = await fetch(`${BACKEND_URL}/extract-batch`, { method: 'POST', body: formData });
+                const response = await fetch(`${BACKEND_URL}/extract-batch`, {
+                    method: 'POST',
+                    body: formData
+                });
                 const result = await response.json();
+                
                 if (response.ok) {
                     batchDataGlobal = result.results;
-                    renderValidationGrid();
-                } else { alert("AI core tracking error."); }
-            } catch (error) { alert("Network routing exception."); }
-            finally { document.getElementById('extractBtn').disabled = false; }
+                    renderOperationalGrid();
+                    status.innerText = "Processing completed successfully! Please audit the verification matrix below.";
+                } else {
+                    status.innerText = `Error: ${result.detail || 'Failed parsing package'}`;
+                }
+            } catch (error) {
+                status.innerText = `Failed to connect to backend service: ${error.message}`;
+            } finally {
+                extractBtn.disabled = false;
+            }
         }
 
-        function renderValidationGrid() {
+        function renderOperationalGrid() {
             const tbody = document.getElementById('tableBody');
             tbody.innerHTML = "";
             
             batchDataGlobal.forEach((item, index) => {
+                const isError = item.policy_no === "ERROR";
+                const rowClass = isError ? "class='error-row'" : "";
+                
                 tbody.innerHTML += `
-                    <tr id="row-${index}">
-                        <td><strong>${item.source_file || 'File'}</strong></td>
+                    <tr ${rowClass}>
+                        <td><strong>${item.source_file || 'Unknown'}</strong></td>
                         <td>
-                            <div>${item.policy_no}</div>
-                            <small style="color:#6c757d">${item.insurer_company}</small>
+                            <div style="font-weight:600">${item.policy_no}</div>
+                            <div style="font-size:11px; color:#555">${item.insurer_company}</div>
                         </td>
                         <td>
-                            <input type="text" list="rmDataList" id="rm-${index}" placeholder="Search RM..." oninput="validateFormStatus()">
+                            <input type="text" list="rmOptionsList" id="rmInput-${index}" placeholder="Type to search RM..." oninput="evaluateGridValidation()">
                         </td>
                         <td>
-                            <input type="text" list="agentDataList" id="agent-${index}" placeholder="Search Name or ID..." oninput="updateAgentId(${index})">
-                            <span id="agentIdDisplay-${index}" class="agent-id-span">ID: Unassigned</span>
+                            <input type="text" list="agentOptionsList" id="agentInput-${index}" placeholder="Type name or ID..." oninput="extractAgentRosterContext(${index})">
+                            <span id="agentIdSpan-${index}" class="sub-id-label">ID: Not Selected</span>
                         </td>
                         <td>
-                            <input type="number" id="prem-${index}" placeholder="0.00" step="0.01" oninput="calculateRow(${index})">
+                            <input type="number" id="premiumInput-${index}" placeholder="0.00" step="0.01" oninput="executeLiveRowMath(${index})">
                         </td>
                         <td>
-                            <input type="number" id="rate-${index}" placeholder="%" min="0" max="100" step="0.1" oninput="calculateRow(${index})">
+                            <input type="number" id="rateInput-${index}" placeholder="%" min="0" max="100" step="0.01" oninput="executeLiveRowMath(${index})">
                         </td>
-                        <td id="calc-${index}" class="calculated-cell">0.00</td>
+                        <td id="brokerageCalcCell-${index}" class="calc-field">0.00</td>
                     </tr>`;
             });
             
-            document.getElementById('status').innerText = "Data matrix loaded successfully.";
-            document.getElementById('previewCard').style.display = "block";
-            validateFormStatus();
+            document.getElementById('resultTable').style.display = "table";
+            document.getElementById('downloadBtn').style.display = "inline-block";
+            document.getElementById('gridContainer').style.display = "block";
+            evaluateGridValidation();
         }
 
-        // Live Cross-Referencing ID extractor helper logic
-        function updateAgentId(index) {
-            const val = document.getElementById(`agent-${index}`).value;
-            const displaySpan = document.getElementById(`agentIdDisplay-${index}`);
+        // Live Regex Parsing Engine to break apart "Agent Name [POSP-ID]" configurations automatically
+        function extractAgentRosterContext(idx) {
+            const val = document.getElementById(`agentInput-${idx}`).value;
+            const targetSpan = document.getElementById(`agentIdSpan-${idx}`);
             
-            // Match the selection format string pattern: "Name [ID]"
-            const match = val.match(/\[(.*?)\]/);
-            if(match && match[1]) {
-                displaySpan.innerText = `ID: ${match[1]}`;
-                displaySpan.setAttribute('data-clean-id', match[1]);
-                displaySpan.setAttribute('data-clean-name', val.split(' [')[0]);
+            const matches = val.match(/\[(.*?)\]/);
+            if (matches && matches[1]) {
+                targetSpan.innerText = `ID: ${matches[1]}`;
+                targetSpan.setAttribute('data-clean-id', matches[1]);
+                targetSpan.setAttribute('data-clean-name', val.split(' [')[0]);
             } else {
-                displaySpan.innerText = "ID: Unassigned";
-                displaySpan.removeAttribute('data-clean-id');
-                displaySpan.removeAttribute('data-clean-name');
+                targetSpan.innerText = "ID: Not Selected";
+                targetSpan.removeAttribute('data-clean-id');
+                targetSpan.removeAttribute('data-clean-name');
             }
-            validateFormStatus();
+            evaluateGridValidation();
         }
 
-        // Real-Time Calculation Engine with 0-100% Boundary Constraint Lockout
-        function calculateRow(index) {
-            const premInput = document.getElementById(`prem-${index}`);
-            const rateInput = document.getElementById(`rate-${index}`);
-            const calcCell = document.getElementById(`calc-${index}`);
+        // Instant mathematical compiler block matching requested parameters explicitly
+        function executeLiveRowMath(idx) {
+            const premVal = parseFloat(document.getElementById(`premiumInput-${idx}`).value) || 0;
+            const rateInput = document.getElementById(`rateInput-${idx}`);
+            let rateVal = parseFloat(rateInput.value) || 0;
             
-            let premium = parseFloat(premInput.value) || 0;
-            let rate = parseFloat(rateInput.value) || 0;
+            // Boundary lock controls (Forcing values strictly between 0 and 100)
+            if (rateVal < 0) { rateVal = 0; rateInput.value = 0; }
+            if (rateVal > 100) { rateVal = 100; rateInput.value = 100; }
             
-            // Boundary enforcement guard checks
-            if(rate < 0) { rate = 0; rateInput.value = 0; }
-            if(rate > 100) { rate = 100; rateInput.value = 100; }
+            const outcome = premVal * (rateVal / 100);
+            document.getElementById(`brokerageCalcCell-${idx}`).innerText = outcome.toFixed(2); // String formatting rounding safely to 2 decimals
             
-            const brokerage = premium * (rate / 100);
-            calcCell.innerText = brokerage.toFixed(2); // Auto-rounds strictly to two decimal points
-            
-            validateFormStatus();
+            evaluateGridValidation();
         }
 
-        // Deep Validation Evaluation State Machine Block
-        function validateFormStatus() {
-            if(!batchDataGlobal) return;
+        // Operational Form Verification State Machine Evaluation
+        function evaluateGridValidation() {
+            if (!batchDataGlobal) return;
             
-            const month = document.getElementById('batchMonth').value;
-            const year = document.getElementById('batchYear').value;
-            let allValid = true;
+            const monthSelection = document.getElementById('businessMonth').value;
+            const yearSelection = document.getElementById('businessYear').value;
+            let checksPassed = true;
             
-            if(!month || !year) allValid = false;
+            if (!monthSelection || !yearSelection) checksPassed = false;
             
-            for(let i = 0; i < batchDataGlobal.length; i++) {
-                const rm = document.getElementById(`rm-${i}`).value;
-                const agentId = document.getElementById(`agentIdDisplay-${i}`).getAttribute('data-clean-id');
-                const prem = document.getElementById(`prem-${i}`).value;
-                const rate = document.getElementById(`rate-${i}`).value;
+            for (let i = 0; i < batchDataGlobal.length; i++) {
+                const rm = document.getElementById(`rmInput-${i}`).value;
+                const agentId = document.getElementById(`agentIdSpan-${i}`).getAttribute('data-clean-id');
+                const prem = document.getElementById(`premiumInput-${i}`).value;
+                const rate = document.getElementById(`rateInput-${i}`).value;
                 
-                if(!rm || !agentId || !prem || !rate || parseFloat(prem) <= 0 || parseFloat(rate) < 0) {
-                    allValid = false;
+                // Ensure inputs exist and values match baseline logical rules
+                if (!rm || !agentId || !prem || !rate || parseFloat(prem) < 0 || parseFloat(rate) < 0) {
+                    checksPassed = false;
                     break;
                 }
             }
             
-            const warningBanner = document.getElementById('warningText');
+            const alertBanner = document.getElementById('alertBanner');
             const downloadBtn = document.getElementById('downloadBtn');
             
-            if(allValid) {
-                warningBanner.style.display = "none";
+            if (checksPassed) {
+                alertBanner.style.display = "none";
                 downloadBtn.disabled = false;
             } else {
-                warningBanner.style.display = "block";
+                alertBanner.style.display = "block";
                 downloadBtn.disabled = true;
             }
         }
 
-        async function generateReport() {
-            const month = document.getElementById('batchMonth').value;
-            const year = document.getElementById('batchYear').value;
+        async function downloadBatchExcel() {
+            if (!batchDataGlobal) return;
             
-            // Packaging and map-compiling row objects to deliver to backend
-            const finalPayload = batchDataGlobal.map((item, i) => {
-                const agentSpan = document.getElementById(`agentIdDisplay-${i}`);
+            const month = document.getElementById('businessMonth').value;
+            const year = document.getElementById('businessYear').value;
+            
+            // Map table inputs together into a single structured compilation array
+            const structuralPayload = batchDataGlobal.map((item, idx) => {
+                const idSpan = document.getElementById(`agentIdSpan-${idx}`);
                 return {
                     business_month: month,
                     business_year: year,
@@ -251,14 +292,17 @@
                     policy_no: item.policy_no,
                     insurer_company: item.insurer_company,
                     customer_name: item.customer_name,
+                    product_name: item.product_name,
                     gross_premium: parseFloat(item.gross_premium) || 0,
                     gst: parseFloat(item.gst) || 0,
-                    relationship_manager: document.getElementById(`rm-${i}`).value,
-                    agent_id: agentSpan.getAttribute('data-clean-id'),
-                    agent_name: agentSpan.getAttribute('data-clean-name'),
-                    commissionable_premium: parseFloat(document.getElementById(`prem-${i}`).value) || 0,
-                    brokerage_rate_percent: parseFloat(document.getElementById(`rate-${i}`).value) || 0,
-                    calculated_brokerage: parseFloat(document.getElementById(`calc-${i}`).innerText) || 0
+                    policy_start_date: item.policy_start_date,
+                    policy_end_date: item.policy_end_date,
+                    relationship_manager: document.getElementById(`rmInput-${idx}`).value,
+                    agent_id: idSpan.getAttribute('data-clean-id'),
+                    agent_name: idSpan.getAttribute('data-clean-name'),
+                    commissionable_premium: parseFloat(document.getElementById(`premiumInput-${idx}`).value) || 0,
+                    brokerage_rate_percent: parseFloat(document.getElementById(`rateInput-${idx}`).value) || 0,
+                    calculated_brokerage: parseFloat(document.getElementById(`brokerageCalcCell-${idx}`).innerText) || 0
                 };
             });
 
@@ -266,8 +310,9 @@
                 const response = await fetch(`${BACKEND_URL}/export-excel-batch`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(finalPayload)
+                    body: JSON.stringify(structuralPayload)
                 });
+
                 if (response.ok) {
                     const blob = await response.blob();
                     const url = window.URL.createObjectURL(blob);
@@ -277,8 +322,12 @@
                     document.body.appendChild(a);
                     a.click();
                     a.remove();
-                } else { alert("Failed generation routine."); }
-            } catch (e) { alert("Error downloading target build package."); }
+                } else {
+                    alert("Failed to generate Excel compilation sheet layout package.");
+                }
+            } catch (error) {
+                alert(`Error downloading workbook stream mapping execution: ${error.message}`);
+            }
         }
     </script>
 </body>
