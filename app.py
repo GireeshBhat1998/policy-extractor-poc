@@ -1,9 +1,9 @@
 from dotenv import load_dotenv
-load_dotenv()  # Automatically injects the GEMINI_API_KEY from Render environment settings
+load_dotenv()
 import os
 import io
 import json
-from typing import List
+from typing import List, Optional
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -11,11 +11,10 @@ from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
 import pandas as pd
-import pdfplumber  # <-- NEW HYBRID LIBRARY IMPORT
+import pdfplumber
 
 app = FastAPI()
 
-# Enable CORS so your local desktop HTML file can talk to the Render Cloud server
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,7 +22,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Define the data contract for extraction
+# --- EXPANDED SCHEMA: Added Conditional Motor Fields ---
 class PolicyExtraction(BaseModel):
     policy_no: str = Field(description="The unique policy or certificate number")
     insurer_company: str = Field(description="Name of the insurance company")
@@ -33,8 +32,15 @@ class PolicyExtraction(BaseModel):
     product_name: str = Field(description="The specific name of the insurance plan or product")
     policy_start_date: str = Field(description="The risk commencement or start date of the policy")
     policy_end_date: str = Field(description="The expiry or end date of the policy")
+    
+    # Motor Specific Context
+    is_motor_policy: bool = Field(description="True if this is a motor, car, or vehicle insurance policy, False otherwise")
+    rto_location: str = Field(description="RTO Location (Motor only), leave blank if not applicable", default="")
+    vehicle_make_model: str = Field(description="Vehicle Make and Model (Motor only), leave blank if not applicable", default="")
+    fuel_type: str = Field(description="Fuel Type (Motor only), leave blank if not applicable", default="")
+    cubic_capacity: str = Field(description="Cubic Capacity or CC (Motor only), leave blank if not applicable", default="")
+    mfg_or_reg_date: str = Field(description="Manufacturing or Registration Month and Year (Motor only), leave blank if not applicable", default="")
 
-# Initialize the Gemini Client
 client = genai.Client()
 
 @app.get("/metadata")
@@ -50,7 +56,6 @@ def get_metadata():
 
 @app.post("/extract-batch")
 async def extract_multiple_policies(files: List[UploadFile] = File(...)):
-    """Accepts multiple files, intelligently pre-parses text, and packages structured responses"""
     combined_results = []
     
     for file in files:
@@ -60,10 +65,8 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
         try:
             pdf_bytes = await file.read()
             
-            # --- 🚀 HYBRID EXTRACTION LOGIC (SPEED & COST OPTIMIZATION) ---
             extracted_text = ""
             try:
-                # Attempt to extract raw text streams locally using python
                 with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
                     for page in pdf.pages:
                         page_text = page.extract_text()
@@ -72,21 +75,16 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
             except Exception as e:
                 print(f"Local parsing skipped/failed: {e}")
             
-            # Determine Payload Architecture based on local extraction success
             if len(extracted_text.strip()) > 500:
-                # DIGITAL PDF ROUTE: Highly efficient text-based prompt (Uses 80% fewer tokens, fixes IndusInd table issues)
                 prompt_contents = [
-                    f"Analyze this raw text extracted from an insurance policy and accurately extract the requested fields mapping them exactly to the schema contract provided.\n\nRAW TEXT:\n{extracted_text}"
+                    f"Analyze this raw text extracted from an insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract.\n\nRAW TEXT:\n{extracted_text}"
                 ]
             else:
-                # SCANNED IMAGE ROUTE: Fallback to heavier Visual Byte extraction for physical paper scans
                 prompt_contents = [
                     types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
-                    "Analyze this scanned insurance policy image and accurately extract the requested fields mapping them exactly to the schema contract provided."
+                    "Analyze this scanned insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract."
                 ]
-            # --------------------------------------------------------------
 
-            # Call Gemini API with the optimized payload
             response = client.models.generate_content(
                 model="gemini-3.1-flash-lite",
                 contents=prompt_contents,
@@ -102,12 +100,13 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
             combined_results.append(extracted_dict)
             
         except Exception as e:
+            # Fallback error row now includes blanks for the new motor fields
             combined_results.append({
-                "policy_no": "ERROR", 
-                "insurer_company": "Failed to parse file",
-                "customer_name": f"Error message: {str(e)}", 
-                "gross_premium": "0", "gst": "0",
+                "policy_no": "ERROR", "insurer_company": "Failed to parse file",
+                "customer_name": f"Error message: {str(e)}", "gross_premium": "0", "gst": "0",
                 "product_name": "N/A", "policy_start_date": "N/A", "policy_end_date": "N/A",
+                "is_motor_policy": False, "rto_location": "", "vehicle_make_model": "",
+                "fuel_type": "", "cubic_capacity": "", "mfg_or_reg_date": "",
                 "source_file": file.filename
             })
             
@@ -117,13 +116,18 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
 async def export_batch_to_excel(data: List[dict]):
     try:
         df = pd.DataFrame(data)
+        
+        # --- NEW COLUMN ORDER: Added the Motor Fields at the end of the sheet ---
         preferred_order = [
             "business_month", "business_year", "source_file", "policy_no", 
             "insurer_company", "customer_name", "product_name", "gross_premium", "gst",
             "policy_start_date", "policy_end_date", "relationship_manager", 
             "agent_id", "agent_name", "commissionable_premium", 
-            "brokerage_rate_percent", "calculated_brokerage"
+            "brokerage_rate_percent", "calculated_brokerage",
+            "is_motor_policy", "rto_location", "vehicle_make_model", 
+            "fuel_type", "cubic_capacity", "mfg_or_reg_date"
         ]
+        
         clean_cols = [c for c in preferred_order if c in df.columns] + [c for c in df.columns if c not in preferred_order]
         df = df[clean_cols]
         df.columns = [col.replace('_', ' ').title() for col in df.columns]
