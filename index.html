@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Policy Data Processing Tool</title>
     <style>
-        /* Modern Fluid UX Foundation - Auto-scaling padding/widths based on viewport bounds */
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; color: #333; background-color: #fcfcfc; line-height: 1.4; }
         h2 { margin: 15px 0 25px 0; font-size: 1.6rem; text-align: center; color: #111; }
@@ -14,7 +13,6 @@
         h3 { font-size: 1.1rem; margin-bottom: 15px; color: #495057; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px; }
         .upload-section { margin-top: 15px; }
         
-        /* Flexbox Meta Wrapper */
         .global-meta-box { display: flex; flex-wrap: wrap; gap: 20px; background-color: #f1f3f5; padding: 15px; border-radius: 6px; margin-bottom: 20px; align-items: center; }
         .meta-item { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 250px; }
         .global-meta-box select { flex: 1; padding: 10px 12px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; background: #fff; }
@@ -31,21 +29,18 @@
         .status-message { color: #007bff; font-weight: bold; margin-top: 15px; min-height: 20px; font-size: 14px; }
         .validation-warning { display: block; background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 12px 15px; border-radius: 4px; margin-top: 15px; font-weight: 500; font-size: 13px; }
         
-        /* Technical Error Output Console Card Box */
         .error-console-box { border: 1px solid #f5c6cb; background-color: #f8d7da; padding: 20px; border-radius: 8px; margin-top: 25px; color: #721c24; display: none; }
         .error-console-box h4 { font-size: 14px; margin-bottom: 10px; font-weight: bold; display: flex; align-items: center; gap: 6px; }
         .error-log-list { list-style: square inside; font-family: monospace; font-size: 12px; line-height: 1.6; }
         .error-log-list li { margin-bottom: 4px; }
         
-        /* Flexible Responsive Scroll Wrapper for Complex Spreadsheets */
         .table-responsive-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e0e0e0; border-radius: 6px; margin-top: 15px; }
-        table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; min-width: 1100px; }
+        table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; min-width: 1200px; }
         th, td { border: 1px solid #e0e0e0; padding: 12px 10px; text-align: left; vertical-align: middle; }
         th { background-color: #f8f9fa; color: #495057; font-weight: 600; }
         tr:nth-child(even) { background-color: #fdfdfd; }
         .error-row { color: #dc3545; font-weight: bold; background-color: #fff5f5 !important; }
         
-        /* UI Input Component Adjustments */
         input[type="text"], input[type="number"] { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; background-color: #fff; }
         input[type="text"]:focus, input[type="number"]:focus { border-color: #80bdff; outline: 0; box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25); }
         .calc-field { font-weight: bold; color: #2b2b2b; background-color: #f8f9fa; text-align: right; padding-right: 15px; }
@@ -93,20 +88,21 @@
 
     <div class="card" id="gridContainer" style="display:none;">
         <h3>3. Verification Matrix</h3>
-        <div id="alertBanner" class="validation-warning">⚠️ Action Required: Please specify the Business Month/Year, assign a valid RM and Agent selection, and log numerical premium values (0 is allowed) to unlock final spreadsheet compiling capabilities.</div>
+        <div id="alertBanner" class="validation-warning">⚠️ Action Required: Please specify the Business Month/Year, assign a valid RM and Agent selection, and log numerical values (0 is allowed) to unlock final spreadsheet compiling capabilities.</div>
         
         <div class="table-responsive-wrapper">
             <table id="resultTable">
                 <thead>
                     <tr>
-                        <th style="width: 14%;">Source File</th>
-                        <th style="width: 18%;">Policy & Insurer Context</th>
-                        <th style="width: 16%;">Relationship Manager</th>
-                        <th style="width: 16%;">POSP / Agent Search</th>
-                        <th style="width: 12%;">Gross Premium (Editable)</th>
-                        <th style="width: 12%;">Comm. Premium</th>
-                        <th style="width: 12%;">Brokerage Rate (Grid)</th>
-                        <th style="width: 14%;">Calculated Brokerage (Grid)</th>
+                        <th style="width: 12%;">Source File</th>
+                        <th style="width: 15%;">Policy & Insurer Context</th>
+                        <th style="width: 13%;">Relationship Manager</th>
+                        <th style="width: 13%;">POSP / Agent Search</th>
+                        <th style="width: 10%;">Gross Premium</th>
+                        <th style="width: 9%;">Agent Comm. (%)</th>
+                        <th style="width: 10%;">Comm. Premium</th>
+                        <th style="width: 9%;">Brokerage Rate (%)</th>
+                        <th style="width: 9%;">Calc. Brokerage</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
@@ -152,7 +148,6 @@
                 document.getElementById('rmOptionsList').innerHTML = dynamicRosters.rms.map(rm => `<option value="${rm}">`).join('');
             }
             if(dynamicRosters.agents) {
-                // 🔥 FIXED: Explicitly maps to ag.id to align 100% with your agent_list.json file
                 document.getElementById('agentOptionsList').innerHTML = dynamicRosters.agents.map(ag => `<option value="${ag.name} [${ag.id}]" data-id="${ag.id}" data-name="${ag.name}">`).join('');
             }
         }
@@ -175,7 +170,6 @@
             document.getElementById('errorLogList').innerHTML = "";
             downloadBtn.style.display = "none";
 
-            // --- LIVE CAPTION ENGINE: Added Here ---
             const processingStages = [
                 "📡 Uploading documents securely to Render Cloud...",
                 "🔍 Extracting raw text layers via local engines...",
@@ -193,13 +187,12 @@
                     status.innerText = processingStages[stageIndex];
                 }
             }, 3500);
-            // ----------------------------------------
 
             try {
                 const response = await fetch(`${BACKEND_URL}/extract-batch`, { method: 'POST', body: formData });
                 const result = await response.json();
                 
-                clearInterval(liveCaptionTimer); // Stop timer when server responds
+                clearInterval(liveCaptionTimer);
                 
                 if (response.ok) {
                     batchDataGlobal = result.results;
@@ -254,6 +247,9 @@
                         </td>
                         <td>
                             <input type="number" id="grossInput-${index}" value="${cleanGross}" step="0.01" oninput="evaluateGridValidation()">
+                        </td>
+                        <td>
+                            <input type="number" id="agentCommInput-${index}" placeholder="%" step="0.01" min="0" oninput="evaluateGridValidation()">
                         </td>
                         <td>
                             <input type="number" id="premiumInput-${index}" placeholder="0.00" step="0.01" oninput="executeLiveRowMath(${index})">
@@ -320,10 +316,12 @@
                 const idSpan = document.getElementById(`agentIdSpan-${i}`);
                 const extractedCleanId = idSpan ? idSpan.getAttribute('data-clean-id') : null;
                 const gross = document.getElementById(`grossInput-${i}`).value;
+                const agentComm = document.getElementById(`agentCommInput-${i}`).value;
                 const prem = document.getElementById(`premiumInput-${i}`).value;
                 const rate = document.getElementById(`rateInput-${i}`).value;
                 
-                if (!rm || !extractedCleanId || gross === "" || prem === "" || rate === "" || parseFloat(gross) < 0 || parseFloat(prem) < 0 || parseFloat(rate) < 0) {
+                // Explicitly checks for empty strings to mandate input, but "0" string passes safely
+                if (!rm || !extractedCleanId || gross === "" || agentComm === "" || prem === "" || rate === "" || parseFloat(gross) < 0 || parseFloat(agentComm) < 0 || parseFloat(prem) < 0 || parseFloat(rate) < 0) {
                     checksPassed = false;
                     break;
                 }
@@ -350,8 +348,9 @@
                 return {
                     business_month: month,
                     business_year: year,
-                    source_file: item.source_file,
-                    policy_no: item.policy_no,
+                    
+                    // Maps policy_no from backend directly to CSV's required 'policy_number'
+                    policy_number: item.policy_no,
                     insurer_company: item.insurer_company,
                     customer_name: item.customer_name,
                     product_name: item.product_name,
@@ -360,7 +359,6 @@
                     policy_start_date: item.policy_start_date,
                     policy_end_date: item.policy_end_date,
                     
-                    // --- Pass through the hidden background motor data ---
                     is_motor_policy: item.is_motor_policy || false,
                     rto_location: item.rto_location || "",
                     vehicle_make_model: item.vehicle_make_model || "",
@@ -371,9 +369,15 @@
                     relationship_manager: document.getElementById(`rmInput-${idx}`).value,
                     agent_id: idSpan ? (idSpan.getAttribute('data-clean-id') || "") : "",
                     agent_name: idSpan ? (idSpan.getAttribute('data-clean-name') || "") : "",
+                    
+                    // Included manual entry mapping
+                    agent_commission_rate: parseFloat(document.getElementById(`agentCommInput-${idx}`).value) || 0,
                     commissionable_premium: parseFloat(document.getElementById(`premiumInput-${idx}`).value) || 0,
                     brokerage_rate_percent: parseFloat(document.getElementById(`rateInput-${idx}`).value) || 0,
-                    calculated_brokerage: parseFloat(document.getElementById('brokerageCalcCell-' + idx).innerText) || 0
+                    calculated_brokerage: parseFloat(document.getElementById('brokerageCalcCell-' + idx).innerText) || 0,
+                    
+                    // Pushed to end of payload order
+                    source_file: item.source_file
                 };
             });
 
