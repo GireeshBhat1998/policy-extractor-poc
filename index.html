@@ -39,8 +39,12 @@
         
         /* Flexible Responsive Scroll Wrapper for Complex Spreadsheets */
         .table-responsive-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e0e0e0; border-radius: 6px; margin-top: 15px; }
-        table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; min-width: 1200px; }
-        th, td { border: 1px solid #e0e0e0; padding: 12px 10px; text-align: left; vertical-align: middle; }
+        
+        /* FIXED: Added 'table-layout: fixed' to strictly enforce column widths */
+        table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; min-width: 1200px; table-layout: fixed; }
+        
+        /* FIXED: Added word-wrap attributes to prevent text bleed */
+        th, td { border: 1px solid #e0e0e0; padding: 12px 10px; text-align: left; vertical-align: middle; word-wrap: break-word; overflow-wrap: break-word; }
         th { background-color: #f8f9fa; color: #495057; font-weight: 600; }
         tr:nth-child(even) { background-color: #fdfdfd; }
         .error-row { color: #dc3545; font-weight: bold; background-color: #fff5f5 !important; }
@@ -50,6 +54,9 @@
         input[type="text"]:focus, input[type="number"]:focus { border-color: #80bdff; outline: 0; box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25); }
         .calc-field { font-weight: bold; color: #2b2b2b; background-color: #f8f9fa; text-align: right; padding-right: 15px; }
         .sub-id-label { display: block; font-size: 11px; color: #6c757d; margin-top: 4px; font-family: monospace; }
+        
+        /* NEW: Class to truncate long filenames nicely with "..." */
+        .filename-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight: 600; display: block; }
 
         @media (max-width: 576px) {
             body { padding: 10px; }
@@ -232,14 +239,18 @@
             let errorCount = 0;
             
             batchDataGlobal.forEach((item, index) => {
-                // FIXED: Changed item.policy_number to item.policy_no so it successfully reads the AI output
                 const isError = item.policy_no === "ERROR";
                 const rowClass = isError ? "class='error-row'" : "";
                 const cleanGross = cleanIncomingNumber(item.gross_premium);
+                const safeFilename = item.source_file || 'Unknown';
                 
                 tbody.innerHTML += `
                     <tr ${rowClass}>
-                        <td><strong>${item.source_file || 'Unknown'}</strong></td>
+                        <td>
+                            <div class="filename-truncate" title="${safeFilename}">
+                                ${safeFilename}
+                            </div>
+                        </td>
                         <td>
                             <div style="font-weight:600">${item.policy_no || 'Missing'}</div>
                             <div style="font-size:11px; color:#555">${item.insurer_company || ''}</div>
@@ -268,7 +279,7 @@
                     
                 if (isError && item.parsing_error) {
                     errorCount++;
-                    logList.innerHTML += `<li><strong>${item.source_file}</strong>: ${item.parsing_error}</li>`;
+                    logList.innerHTML += `<li><strong>${safeFilename}</strong>: ${item.parsing_error}</li>`;
                 }
             });
             
@@ -353,10 +364,7 @@
                 return {
                     business_month: month,
                     business_year: year,
-                    
-                    // FIXED: Mapped item.policy_no out of the AI object directly into 'policy_number'
-                    policy_number: item.policy_no, 
-                    
+                    policy_number: item.policy_no,
                     insurer_company: item.insurer_company,
                     customer_name: item.customer_name,
                     product_name: item.product_name,
