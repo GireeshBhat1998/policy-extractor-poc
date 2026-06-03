@@ -336,6 +336,15 @@
                     gst: cleanIncomingNumber(item.gst),
                     policy_start_date: item.policy_start_date,
                     policy_end_date: item.policy_end_date,
+                    
+                    // --- NEW: Pass through the hidden background motor data ---
+                    is_motor_policy: item.is_motor_policy || false,
+                    rto_location: item.rto_location || "",
+                    vehicle_make_model: item.vehicle_make_model || "",
+                    fuel_type: item.fuel_type || "",
+                    cubic_capacity: item.cubic_capacity || "",
+                    mfg_or_reg_date: item.mfg_or_reg_date || "",
+                    
                     relationship_manager: document.getElementById(`rmInput-${idx}`).value,
                     agent_id: idSpan ? (idSpan.getAttribute('data-clean-id') || "") : "",
                     agent_name: idSpan ? (idSpan.getAttribute('data-clean-name') || "") : "",
