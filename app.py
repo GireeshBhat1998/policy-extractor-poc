@@ -87,8 +87,8 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
                 extracted_text = re.sub(r'[ \t]{2,}', ' ', extracted_text)
                 
                 # --- OPTIMIZATION 3: Hard Token Ceiling ---
-                # Cap the maximum string length to 10,000 characters (~2,500 input tokens max)
-                extracted_text = extracted_text[:10000]
+                # Expanded to 20,000 characters to ensure the bottom of Page 5 (where Tata AIG puts premiums) is never chopped off.
+                extracted_text = extracted_text[:20000]
                 
                 prompt_contents = [
                     f"Analyze this raw text extracted from an insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract.\n\nRAW TEXT:\n{extracted_text}"
