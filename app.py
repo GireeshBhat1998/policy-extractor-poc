@@ -69,9 +69,6 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
             extracted_text = ""
             try:
                 with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-                    # --- OPTIMIZATION 1: Page Limiting ---
-                    # Only scan the first 5 pages where the Policy Schedule lives.
-                    # This instantly drops heavy T&C boilerplate.
                     max_pages = min(5, len(pdf.pages))
                     for i in range(max_pages):
                         page_text = pdf.pages[i].extract_text()
@@ -81,20 +78,14 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
                 print(f"Local parsing skipped/failed: {e}")
             
             if len(extracted_text.strip()) > 500:
-                # --- OPTIMIZATION 2: Regex Token Compression ---
-                # Strip excessive blank lines and multi-spaces that consume useless tokens
                 extracted_text = re.sub(r'\n{2,}', '\n', extracted_text)
                 extracted_text = re.sub(r'[ \t]{2,}', ' ', extracted_text)
-                
-                # --- OPTIMIZATION 3: Hard Token Ceiling ---
-                # Expanded to 20,000 characters to ensure the bottom of Page 5 (where Tata AIG puts premiums) is never chopped off.
                 extracted_text = extracted_text[:20000]
                 
                 prompt_contents = [
                     f"Analyze this raw text extracted from an insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract.\n\nRAW TEXT:\n{extracted_text}"
                 ]
             else:
-                # Fallback for scanned (image) PDFs
                 prompt_contents = [
                     types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
                     "Analyze this scanned insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract."
@@ -115,7 +106,6 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
             combined_results.append(extracted_dict)
             
         except Exception as e:
-            # Error Payload Tracking
             combined_results.append({
                 "policy_no": "ERROR", "insurer_company": "Failed to parse file",
                 "customer_name": "Check error log below", "gross_premium": "0", "gst": "0",
@@ -133,14 +123,15 @@ async def export_batch_to_excel(data: List[dict]):
     try:
         df = pd.DataFrame(data)
         
+        # --- NEW COLUMN ORDER: Exactly matches your required CSV layout ---
         preferred_order = [
-            "business_month", "business_year", "source_file", "policy_no", 
-            "insurer_company", "customer_name", "product_name", "gross_premium", "gst",
+            "business_month", "business_year", "policy_number", "insurer_company", 
+            "customer_name", "product_name", "gross_premium", "gst",
             "policy_start_date", "policy_end_date", "relationship_manager", 
-            "agent_id", "agent_name", "commissionable_premium", 
+            "agent_id", "agent_name", "agent_commission_rate", "commissionable_premium", 
             "brokerage_rate_percent", "calculated_brokerage",
             "is_motor_policy", "rto_location", "vehicle_make_model", 
-            "fuel_type", "cubic_capacity", "mfg_or_reg_date"
+            "fuel_type", "cubic_capacity", "mfg_or_reg_date", "source_file"
         ]
         
         clean_cols = [c for c in preferred_order if c in df.columns] + [c for c in df.columns if c not in preferred_order]
