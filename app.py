@@ -100,14 +100,15 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
             combined_results.append(extracted_dict)
             
         except Exception as e:
-            # Fallback error row now includes blanks for the new motor fields
+            # --- NEW: Added explicit parsing_error to capture the traceback ---
             combined_results.append({
                 "policy_no": "ERROR", "insurer_company": "Failed to parse file",
-                "customer_name": f"Error message: {str(e)}", "gross_premium": "0", "gst": "0",
+                "customer_name": "Check error log below", "gross_premium": "0", "gst": "0",
                 "product_name": "N/A", "policy_start_date": "N/A", "policy_end_date": "N/A",
                 "is_motor_policy": False, "rto_location": "", "vehicle_make_model": "",
                 "fuel_type": "", "cubic_capacity": "", "mfg_or_reg_date": "",
-                "source_file": file.filename
+                "source_file": file.filename,
+                "parsing_error": str(e)
             })
             
     return {"success": True, "results": combined_results}
