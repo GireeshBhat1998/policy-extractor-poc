@@ -169,25 +169,48 @@
             for (let i = 0; i < fileInput.files.length; i++) { formData.append("files", fileInput.files[i]); }
 
             extractBtn.disabled = true;
-            status.innerText = `Connecting to Render Cloud... Processing ${fileInput.files.length} document(s) via Gemini...`;
             document.getElementById('tableBody').innerHTML = "";
             document.getElementById('gridContainer').style.display = "none";
             document.getElementById('errorConsole').style.display = "none";
             document.getElementById('errorLogList').innerHTML = "";
             downloadBtn.style.display = "none";
 
+            // --- LIVE CAPTION ENGINE: Added Here ---
+            const processingStages = [
+                "📡 Uploading documents securely to Render Cloud...",
+                "🔍 Extracting raw text layers via local engines...",
+                "🧠 Running Gemini AI schema mapping...",
+                "⚙️ Validating extracted data and motor fields...",
+                "📊 Finalizing matrix compilation..."
+            ];
+            
+            let stageIndex = 0;
+            status.innerText = processingStages[0];
+            
+            const liveCaptionTimer = setInterval(() => {
+                if (stageIndex < processingStages.length - 1) {
+                    stageIndex++;
+                    status.innerText = processingStages[stageIndex];
+                }
+            }, 3500);
+            // ----------------------------------------
+
             try {
                 const response = await fetch(`${BACKEND_URL}/extract-batch`, { method: 'POST', body: formData });
                 const result = await response.json();
+                
+                clearInterval(liveCaptionTimer); // Stop timer when server responds
+                
                 if (response.ok) {
                     batchDataGlobal = result.results;
                     renderOperationalGrid();
-                    status.innerText = "Processing completed successfully! Proceed to Verification Matrix";
+                    status.innerHTML = "✅ <strong>Processing completed!</strong> Proceed to Verification Matrix below.";
                 } else {
-                    status.innerText = `Error: ${result.detail || 'Failed parsing package'}`;
+                    status.innerText = `❌ Critical Error: ${result.detail || 'Failed parsing package'}`;
                 }
             } catch (error) {
-                status.innerText = `Failed to connect to backend service: ${error.message}`;
+                clearInterval(liveCaptionTimer);
+                status.innerText = `❌ Failed to connect to backend service: ${error.message}`;
             } finally {
                 extractBtn.disabled = false;
             }
@@ -337,7 +360,7 @@
                     policy_start_date: item.policy_start_date,
                     policy_end_date: item.policy_end_date,
                     
-                    // --- NEW: Pass through the hidden background motor data ---
+                    // --- Pass through the hidden background motor data ---
                     is_motor_policy: item.is_motor_policy || false,
                     rto_location: item.rto_location || "",
                     vehicle_make_model: item.vehicle_make_model || "",
