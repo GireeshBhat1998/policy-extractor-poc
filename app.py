@@ -36,7 +36,7 @@ INSURER_MAPPINGS = {
     "Liberty": {"pol": ["POLICY/ENDORSEMENT NO.", "Policy No"], "cust": ["INSURED NAME", "Customer Name"], "prod": ["PRODUCT NAME", "Product"], "prem": ["GWP", "Premium", "Gross Premium"], "comm": ["FINAL COMM TO BE PAID", "Commission", "Total Commission"], "date": ["POLICY START DATE", "Policy Date"]},
     "National": {"pol": ["Policy #-Endo#", "Policy No", "Policy Number"], "cust": ["Insured Name", "Customer Name"], "prod": ["Prdt Code", "Product Name"], "prem": ["Premium Amount", "Premium"], "comm": ["Commission Amount", "Commission"], "date": ["Effective Date", "Policy Date"]},
     "Royal Sundaram": {"pol": ["POLICY ID", "Policy No"], "cust": ["CLIENT NAME", "Customer Name"], "prod": ["PRODUCT CATEGORY 2", "Product Name"], "prem": ["GROSS WRITTEN PREMIUM", "Premium"], "comm": ["TOTAL COMMISSION", "Commission"], "date": ["POLICY ENTRY DATE", "Policy Date"]},
-    "Go Digit Life": {"pol": ["Policy Number", "Policy No"], "cust": ["Policy Holder Name", "Customer Name"], "prod": ["Product Name", "Product Code"], "prem": ["Net Premium", "Premium"], "comm": ["Total Commission Amount", "Commission"], "date": ["Policy Start Date", "Policy Date"]},
+    "Go Digit Life": {"pol": ["Policy Number", "Policy No"], "cust": ["Policy Holder Name", "Policy Holder", "Customer Name"], "prod": ["Product Name", "Product Code"], "prem": ["Net Premium", "Premium"], "comm": ["Total Commission Amount", "Commission"], "date": ["Policy Start Date", "Policy Issue Date", "Policy Date"]},
     "Go Digit General": {"pol": ["Policy Number", "Policy No.", "Policy No"], "cust": ["Customer Name", "Insured Name"], "prod": ["Product Name", "Product"], "prem": ["Gross Premium", "Net Premium", "Premium"], "comm": ["Total Commission", "Commission"], "date": ["Policy Issue Date", "Policy Date", "Policy Start Date"]},
     "Tata AIG": {"pol": ["Policy No", "Policy Number"], "cust": ["Insured Name", "Customer Name"], "prod": ["Product", "Product Name"], "prem": ["Premium", "Gross Premium"], "comm": ["Commission", "Total Commission"], "date": ["Policy Date", "Policy Start Date"]},
     "HDFC Ergo": {"pol": ["Policy Number", "Policy No.", "Policy No"], "cust": ["Customer Name", "Insured Name"], "prod": ["Product Name", "Product"], "prem": ["Premium", "Gross Premium", "Net Premium"], "comm": ["Commission", "Total Commission", "Brokerage"], "date": ["Policy Date", "Policy Start Date", "Transaction Date"]}
@@ -72,11 +72,6 @@ def get_metadata():
         return {"rms": rms, "agents": agents}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed loading internal rosters: {str(e)}")
-
-
-# ==========================================
-# PHASE 1: POLICY DATA PROCESSING ROUTES (INTACT)
-# ==========================================
 
 @app.post("/extract-batch")
 async def extract_multiple_policies(files: List[UploadFile] = File(...)):
@@ -137,20 +132,16 @@ async def export_batch_to_excel(data: List[dict]):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 # ==========================================
-# PHASE 2: UNIVERSAL COMMISSION PROCESSING
+# PHASE 2: COMMISSION PROCESSING (UPGRADED CONFIDENCE SCORING)
 # ==========================================
 
 def safe_float(val):
-    """Aggressively extracts numbers to prevent sequence crashes from weird characters"""
     if pd.isna(val) or val is None or str(val).strip() == "":
         return 0.0
     val_str = str(val).strip()
-    # Remove obvious non-number strings
     if val_str.lower() in ['nil', 'na', 'n/a', '-']:
         return 0.0
-    # Use Regex to strip anything that is NOT a digit, decimal, or negative sign
     clean_val = re.sub(r'[^\d.-]', '', val_str)
     try:
         return float(clean_val) if clean_val else 0.0
@@ -158,26 +149,21 @@ def safe_float(val):
         return 0.0
 
 def get_col_name(columns, aliases):
-    """Highly robust fuzzy mapper that prevents False Positives"""
     clean_cols = [str(c).strip().lower().replace('\n', ' ').replace('\r', '') for c in columns]
-    
-    # Pass 1: Look for an EXACT match
+    # Pass 1: Exact Match
     for alias in aliases:
         clean_alias = alias.lower().strip()
         if clean_alias in clean_cols:
             return columns[clean_cols.index(clean_alias)]
-            
-    # Pass 2: Look for a CONTAINMENT match (e.g., "policy no" matches "policy no.")
+    # Pass 2: Containment
     for alias in aliases:
         clean_alias = alias.lower().strip()
         for i, c in enumerate(clean_cols):
             if clean_alias in c:
                 return columns[i]
-                
     return None
 
 def read_file_to_dfs(filename, contents):
-    """Reads files as strictly string DataFrames to avoid Pandas inference crashes"""
     dfs = []
     filename_lower = filename.lower()
     
@@ -202,7 +188,6 @@ def read_file_to_dfs(filename, contents):
         except Exception:
             pass
     else:
-        # Excel Engine
         engine = 'pyxlsb' if filename_lower.endswith('.xlsb') else ('openpyxl' if filename_lower.endswith('.xlsx') else None)
         try:
             xls = pd.ExcelFile(io.BytesIO(contents), engine=engine)
@@ -218,10 +203,41 @@ def read_file_to_dfs(filename, contents):
     return dfs
 
 def guess_insurer_from_df(df):
+    """Calculates a confidence score to prevent false-positive mapping"""
     df.columns = df.columns.astype(str).str.strip()
-    for insurer, keys in INSURER_MAPPINGS.items():
-        if get_col_name(df.columns, keys["pol"]):
-            return insurer
+    
+    def score_cols(cols, mapping):
+        score = 0
+        if get_col_name(cols, mapping['pol']): score += 1
+        if get_col_name(cols, mapping['cust']): score += 1
+        if get_col_name(cols, mapping['prem']): score += 1
+        if get_col_name(cols, mapping['comm']): score += 1
+        return score
+
+    best_insurer = "Unknown"
+    max_score = 0
+    
+    # Scan standard headers
+    for insurer, mapping in INSURER_MAPPINGS.items():
+        score = score_cols(df.columns, mapping)
+        if score > max_score:
+            max_score = score
+            best_insurer = insurer
+            
+    if max_score >= 3:
+        return best_insurer
+        
+    # Scan hidden headers (first 15 rows)
+    for idx, row in df.head(15).iterrows():
+        row_strs = [str(x).strip() for x in row.values]
+        for insurer, mapping in INSURER_MAPPINGS.items():
+            score = score_cols(row_strs, mapping)
+            if score > max_score:
+                max_score = score
+                best_insurer = insurer
+        if max_score >= 3:
+            return best_insurer
+            
     return "Unknown"
 
 @app.post("/analyze-commission-files")
@@ -273,18 +289,33 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                 target_df.columns = target_df.columns.astype(str).str.strip()
                 pol_col = get_col_name(target_df.columns, mapping['pol'])
                 
-                # Smart Header Finder (bypasses blank rows above tables like National Insurance)
+                # Upgraded Smart Header Finder
                 if not pol_col:
-                    for idx, row in target_df.iterrows():
+                    for idx, row in target_df.head(20).iterrows():
                         row_strs = [str(x).strip() for x in row.values]
                         found_pol = get_col_name(row_strs, mapping['pol'])
-                        if found_pol:
-                            target_df.columns = row_strs
+                        found_prem = get_col_name(row_strs, mapping['prem'])
+                        found_comm = get_col_name(row_strs, mapping['comm'])
+                        
+                        # Only reset headers if it finds Pol Num AND Premium/Comm
+                        if found_pol and (found_prem or found_comm):
+                            # Ensure unique column names to prevent Pandas crashes
+                            unique_cols = []
+                            seen = set()
+                            for c in row_strs:
+                                new_c = c
+                                count = 1
+                                while new_c in seen:
+                                    new_c = f"{c}_{count}"
+                                    count += 1
+                                seen.add(new_c)
+                                unique_cols.append(new_c)
+                                
+                            target_df.columns = unique_cols
                             target_df = target_df.iloc[idx+1:].reset_index(drop=True)
                             pol_col = found_pol
                             break
                 
-                # If we finally found the Policy Number column, extract the sheet!
                 if pol_col:
                     cust_col = get_col_name(target_df.columns, mapping['cust'])
                     prod_col = get_col_name(target_df.columns, mapping['prod'])
@@ -307,7 +338,7 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                             "policy_date": str(row.get(date_col, '')) if date_col else "",
                             "source_file": file.filename
                         })
-                    break # Data extracted successfully, stop looking at other sheets in this specific file
+                    break 
                     
         if not standardized_data:
             return {"success": True, "total_records": 0, "data": []}
