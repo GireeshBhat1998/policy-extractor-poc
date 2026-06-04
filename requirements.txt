@@ -5,6 +5,7 @@ pydantic
 pandas
 openpyxl
 pyxlsb
+xlrd
 python-multipart
 python-dotenv
 pdfplumber
