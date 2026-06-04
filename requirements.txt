@@ -4,6 +4,7 @@ google-genai
 pydantic
 pandas
 openpyxl
+pyxlsb
 python-multipart
 python-dotenv
 pdfplumber
