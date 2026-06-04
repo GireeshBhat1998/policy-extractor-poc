@@ -25,20 +25,21 @@ app.add_middleware(
 )
 
 # ==========================================
-# UNIVERSAL COMMISSION MAPPING DICTIONARY
+# UNIVERSAL FUZZY MAPPING DICTIONARY
+# Values are now LISTS of possible column names (aliases)
 # ==========================================
 INSURER_MAPPINGS = {
-    "Bajaj Allianz": {"pol": "POLICY_REFERENCE", "cust": "CUSTOMER NAME", "prod": "PRODUCT", "prem": "NET PREMIUM", "comm": "TOTAL COMMISSION", "date": "POLICY DATE"},
-    "Care Health": {"pol": "Policy No", "cust": "Customer Name", "prod": "Type", "prem": "Premium", "comm": "Total Amount", "date": "Effective Date/Policy Start date"},
-    "ICICI Lombard": {"pol": "POLICY_NUMBER", "cust": "INSURED_CUSTOMER_NAME", "prod": "PRODUCT_NAME", "prem": "TOTAL_PREMIUM_RECEIVED", "comm": "ACTUAL_COMMISSION", "date": "POLICY_START_DATE"},
-    "IndusInd": {"pol": "PolicyNumber", "cust": "InsuredName", "prod": "ProductCode", "prem": "PremiumAmount", "comm": "FinalIRDAComm", "date": "Month"},
-    "Liberty": {"pol": "POLICY/ENDORSEMENT NO.", "cust": "INSURED NAME", "prod": "PRODUCT NAME", "prem": "GWP", "comm": "FINAL COMM TO BE PAID", "date": "POLICY START DATE"},
-    "National": {"pol": "Policy #-Endo#", "cust": "Insured Name", "prod": "Prdt Code", "prem": "Premium Amount", "comm": "Commission Amount", "date": "Effective Date"},
-    "Royal Sundaram": {"pol": "POLICY ID", "cust": "CLIENT NAME", "prod": "PRODUCT CATEGORY 2", "prem": "GROSS WRITTEN PREMIUM", "comm": "TOTAL COMMISSION", "date": "POLICY ENTRY DATE"},
-    "Go Digit Life": {"pol": "Policy Number", "cust": "Policy Holder Name", "prod": "Product Name", "prem": "Net Premium", "comm": "Total Commission Amount", "date": "Policy Start Date"},
-    "Go Digit General": {"pol": "Policy Number", "cust": "Customer Name", "prod": "Product Name", "prem": "Gross Premium", "comm": "Total Commission", "date": "Policy Issue Date"},
-    "Tata AIG": {"pol": "Policy No", "cust": "Insured Name", "prod": "Product", "prem": "Premium", "comm": "Commission", "date": "Policy Date"},
-    "HDFC Ergo": {"pol": "Policy Number", "cust": "Customer Name", "prod": "Product Name", "prem": "Premium", "comm": "Commission", "date": "Policy Date"}
+    "Bajaj Allianz": {"pol": ["POLICY_REFERENCE", "Policy No", "Policy Number", "Policy No."], "cust": ["CUSTOMER NAME", "Insured Name", "Customer Name"], "prod": ["PRODUCT", "Product Name"], "prem": ["NET PREMIUM", "Premium", "Gross Premium"], "comm": ["TOTAL COMMISSION", "Commission"], "date": ["POLICY DATE", "Policy Date"]},
+    "Care Health": {"pol": ["Policy No", "Policy Number"], "cust": ["Customer Name", "Insured Name"], "prod": ["Type", "Product Name"], "prem": ["Premium", "Gross Premium"], "comm": ["Total Amount", "Commission", "Total Commission"], "date": ["Effective Date/Policy Start date", "Policy Date", "Effective Date"]},
+    "ICICI Lombard": {"pol": ["POLICY_NUMBER", "Policy Number", "Policy No"], "cust": ["INSURED_CUSTOMER_NAME", "Customer Name"], "prod": ["PRODUCT_NAME", "Product Name"], "prem": ["TOTAL_PREMIUM_RECEIVED", "Premium", "Gross Premium"], "comm": ["ACTUAL_COMMISSION", "Commission"], "date": ["POLICY_START_DATE", "Policy Date"]},
+    "IndusInd": {"pol": ["PolicyNumber", "Policy No", "Policy Number"], "cust": ["InsuredName", "Customer Name"], "prod": ["ProductCode", "Product Name"], "prem": ["PremiumAmount", "Premium"], "comm": ["FinalIRDAComm", "Commission", "Final Commission"], "date": ["Month", "Policy Date"]},
+    "Liberty": {"pol": ["POLICY/ENDORSEMENT NO.", "Policy No", "Policy Number"], "cust": ["INSURED NAME", "Customer Name"], "prod": ["PRODUCT NAME"], "prem": ["GWP", "Premium", "Gross Premium"], "comm": ["FINAL COMM TO BE PAID", "Commission", "Total Commission"], "date": ["POLICY START DATE", "Policy Date"]},
+    "National": {"pol": ["Policy #-Endo#", "Policy No", "Policy Number"], "cust": ["Insured Name", "Customer Name"], "prod": ["Prdt Code", "Product Name"], "prem": ["Premium Amount", "Premium"], "comm": ["Commission Amount", "Commission"], "date": ["Effective Date", "Policy Date"]},
+    "Royal Sundaram": {"pol": ["POLICY ID", "Policy No", "Policy Number"], "cust": ["CLIENT NAME", "Customer Name"], "prod": ["PRODUCT CATEGORY 2", "Product Name"], "prem": ["GROSS WRITTEN PREMIUM", "Premium"], "comm": ["TOTAL COMMISSION", "Commission"], "date": ["POLICY ENTRY DATE", "Policy Date"]},
+    "Go Digit Life": {"pol": ["Policy Number", "Policy No"], "cust": ["Policy Holder Name", "Customer Name"], "prod": ["Product Name", "Product"], "prem": ["Net Premium", "Premium"], "comm": ["Total Commission Amount", "Commission"], "date": ["Policy Start Date", "Policy Date"]},
+    "Go Digit General": {"pol": ["Policy Number", "Policy No"], "cust": ["Customer Name", "Insured Name"], "prod": ["Product Name", "Product"], "prem": ["Gross Premium", "Premium"], "comm": ["Total Commission", "Commission"], "date": ["Policy Issue Date", "Policy Date"]},
+    "Tata AIG": {"pol": ["Policy No", "Policy Number", "Policy No."], "cust": ["Insured Name", "Customer Name"], "prod": ["Product", "Product Name"], "prem": ["Premium", "Gross Premium"], "comm": ["Commission", "Total Commission"], "date": ["Policy Date"]},
+    "HDFC Ergo": {"pol": ["Policy Number", "Policy No", "Policy No."], "cust": ["Customer Name", "Insured Name"], "prod": ["Product Name", "Product"], "prem": ["Premium", "Gross Premium"], "comm": ["Commission", "Total Commission"], "date": ["Policy Date"]}
 }
 
 SUPPORTED_INSURERS = list(INSURER_MAPPINGS.keys()) + ["Unknown"]
@@ -141,16 +142,45 @@ async def export_batch_to_excel(data: List[dict]):
 # PHASE 2: UNIVERSAL COMMISSION PROCESSING
 # ==========================================
 
+def safe_float(val):
+    """Safely converts messy strings like ' 12,345.67 ' or '₹500' to a clean float"""
+    if pd.isna(val) or val is None or str(val).strip() == "":
+        return 0.0
+    val_str = str(val).replace(',', '').replace('₹', '').replace('Rs', '').replace(' ', '')
+    try:
+        return float(val_str)
+    except ValueError:
+        return 0.0
+
+def get_col_name(columns, aliases):
+    """Fuzzy checks column headers against known aliases"""
+    for col in columns:
+        clean_col = str(col).strip().lower()
+        for alias in aliases:
+            if clean_col == alias.lower():
+                return col
+    # Ultimate Fallback: if it's the policy column, look for the word "policy"
+    if aliases and "policy" in aliases[0].lower():
+        for col in columns:
+            clean_col = str(col).strip().lower()
+            if "policy no" in clean_col or "policy num" in clean_col or "policy_no" in clean_col:
+                return col
+    return None
+
 def read_file_to_dfs(filename, contents):
-    """Bulletproof helper to convert ANY file (CSV, Excel, XLSB, PDF, Fake Excel) to DataFrames."""
+    """Reads files aggressively, using string dtype to prevent Pandas crashes on bad data"""
     dfs = []
     filename_lower = filename.lower()
     
     if filename_lower.endswith('.csv'):
         try:
-            dfs.append(pd.read_csv(io.BytesIO(contents)))
+            dfs.append(pd.read_csv(io.BytesIO(contents), dtype=str))
         except Exception:
-            pass
+            try:
+                # Fallback for weird Windows CSV encodings
+                dfs.append(pd.read_csv(io.BytesIO(contents), encoding='cp1252', dtype=str, on_bad_lines='skip'))
+            except Exception:
+                pass
     elif filename_lower.endswith('.pdf'):
         all_data = []
         try:
@@ -164,30 +194,25 @@ def read_file_to_dfs(filename, contents):
         except Exception:
             pass
     else:
-        # Excel Engine (xlsx, xls, xlsb)
+        # Excel Engine
         engine = 'pyxlsb' if filename_lower.endswith('.xlsb') else ('openpyxl' if filename_lower.endswith('.xlsx') else None)
         try:
             xls = pd.ExcelFile(io.BytesIO(contents), engine=engine)
             for sheet in xls.sheet_names:
-                dfs.append(pd.read_excel(xls, sheet_name=sheet))
+                dfs.append(pd.read_excel(xls, sheet_name=sheet, dtype=str))
         except zipfile.BadZipFile:
-            # Fallback for "Fake Excel" files (actually CSV/HTML named .xls)
             try:
-                dfs.append(pd.read_csv(io.BytesIO(contents)))
+                dfs.append(pd.read_csv(io.BytesIO(contents), dtype=str))
             except Exception:
-                try:
-                    dfs.append(pd.read_csv(io.BytesIO(contents), sep='\t'))
-                except Exception:
-                    pass
+                pass
         except Exception:
             pass
     return dfs
 
 def guess_insurer_from_df(df):
-    """Scans DataFrame headers to guess the insurer based on Mappings."""
     df.columns = df.columns.astype(str).str.strip()
     for insurer, keys in INSURER_MAPPINGS.items():
-        if keys["pol"] in df.columns:
+        if get_col_name(df.columns, keys["pol"]):
             return insurer
     return "Unknown"
 
@@ -205,7 +230,6 @@ async def analyze_commission_files(files: List[UploadFile] = File(...)):
                 if detected != "Unknown":
                     break
             
-            # Smart Fallback: Check filename if headers don't match
             if detected == "Unknown":
                 fname_lower = file.filename.lower()
                 for insurer in SUPPORTED_INSURERS:
@@ -231,54 +255,58 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                 continue 
                 
             contents = await file.read()
-            
-            # Use the exact same bulletproof reader as Step 1
-            try:
-                dfs = read_file_to_dfs(file.filename, contents)
-            except Exception:
-                continue
+            dfs = read_file_to_dfs(file.filename, contents)
 
             mapping = INSURER_MAPPINGS.get(final_insurer)
             if not mapping:
                 continue
 
-            # Iterate through all sheets to find the actual data grid
             for target_df in dfs:
                 target_df.columns = target_df.columns.astype(str).str.strip()
                 
+                pol_col = get_col_name(target_df.columns, mapping['pol'])
+                
                 # Smart Header Finder (bypasses blank rows above tables)
-                if mapping['pol'] not in target_df.columns:
+                if not pol_col:
                     for idx, row in target_df.iterrows():
                         row_strs = [str(x).strip() for x in row.values]
-                        if mapping['pol'] in row_strs:
+                        found_pol = get_col_name(row_strs, mapping['pol'])
+                        if found_pol:
                             target_df.columns = row_strs
                             target_df = target_df.iloc[idx+1:].reset_index(drop=True)
+                            pol_col = found_pol
                             break
                 
-                # Extract if we found the target column
-                if mapping['pol'] in target_df.columns:
+                if pol_col:
+                    # Dynamically resolve all other columns using the alias system
+                    cust_col = get_col_name(target_df.columns, mapping['cust'])
+                    prod_col = get_col_name(target_df.columns, mapping['prod'])
+                    prem_col = get_col_name(target_df.columns, mapping['prem'])
+                    comm_col = get_col_name(target_df.columns, mapping['comm'])
+                    date_col = get_col_name(target_df.columns, mapping['date'])
+                    
                     for _, row in target_df.iterrows():
-                        # Skip blank or totals rows
-                        if pd.isna(row.get(mapping['pol'])) or str(row.get(mapping['pol'])).strip() == "":
+                        pol_val = str(row.get(pol_col, '')).strip()
+                        # Skip blank rows or rows where Pandas read empty cells as 'nan'
+                        if pd.isna(row.get(pol_col)) or pol_val == "" or pol_val.lower() == "nan":
                             continue
                             
                         standardized_data.append({
                             "insurer_company": final_insurer,
-                            "policy_number": str(row.get(mapping['pol'], '')).strip(),
-                            "customer_name": str(row.get(mapping['cust'], '')).strip(),
-                            "product_name": str(row.get(mapping['prod'], '')).strip(),
-                            "gross_premium": float(row.get(mapping['prem'], 0) or 0),
-                            "commission_received": float(row.get(mapping['comm'], 0) or 0),
-                            "policy_date": str(row.get(mapping['date'], '')).strip(),
+                            "policy_number": pol_val,
+                            "customer_name": str(row.get(cust_col, '')) if cust_col else "",
+                            "product_name": str(row.get(prod_col, '')) if prod_col else "",
+                            "gross_premium": safe_float(row.get(prem_col, 0)) if prem_col else 0.0,
+                            "commission_received": safe_float(row.get(comm_col, 0)) if comm_col else 0.0,
+                            "policy_date": str(row.get(date_col, '')) if date_col else "",
                             "source_file": file.filename
                         })
-                    break # Data found, stop checking other blank sheets in this file
+                    break # Data extracted, stop checking other blank sheets in this file
                     
         if not standardized_data:
             return {"success": True, "total_records": 0, "data": []}
             
         clean_df = pd.DataFrame(standardized_data)
-        # Create hidden Match Key (Stripping spaces/hyphens for Phase 3 Reconciliation)
         clean_df['match_key'] = clean_df['policy_number'].astype(str).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
         final_results = clean_df.to_dict(orient='records')
         
