@@ -9,7 +9,6 @@
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         body { display: flex; height: 100vh; background-color: #f4f6f9; color: #333; overflow: hidden; }
         
-        /* Sidebar Styles */
         .sidebar { width: 250px; background-color: #343a40; color: #fff; display: flex; flex-direction: column; transition: width 0.3s ease; z-index: 1000; }
         .sidebar.collapsed { width: 70px; }
         .sidebar-header { padding: 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #4b545c; }
@@ -24,7 +23,6 @@
         .nav-text { margin-left: 10px; white-space: nowrap; overflow: hidden; transition: opacity 0.3s; }
         .sidebar.collapsed .nav-text { opacity: 0; width: 0; }
         
-        /* Main Content Area */
         .main-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
         .top-bar { background-color: #fff; padding: 15px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; align-items: center; border-bottom: 1px solid #e0e0e0; }
         .top-bar h1 { font-size: 1.4rem; color: #111; }
@@ -33,7 +31,6 @@
         .page-section.active-page { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Shared Card Styles */
         .card { border: 1px solid #e0e0e0; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.03); background-color: #fff; margin-bottom: 25px; }
         h3 { font-size: 1.1rem; margin-bottom: 15px; color: #495057; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px; }
         .global-meta-box { display: flex; flex-wrap: wrap; gap: 20px; background-color: #f1f3f5; padding: 15px; border-radius: 6px; margin-bottom: 20px; align-items: center; }
@@ -151,9 +148,9 @@
                 <div class="card">
                     <h3>1. Upload Commission Statements (Batch)</h3>
                     <p style="font-size: 13px; color: #666; margin-bottom: 15px;">
-                        Select all Excel (.xlsx) or CSV commission files for the month. The system will auto-detect the insurer based on the file headers.
+                        Select all Excel (.xlsx, .xlsb), CSV, or PDF commission files. 
                     </p>
-                    <input type="file" id="commissionFilesInput" multiple accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" style="max-width:400px;">
+                    <input type="file" id="commissionFilesInput" multiple accept=".csv, .pdf, .xlsb, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" style="max-width:400px;">
                     <button id="analyzeCommBtn" onclick="analyzeCommissionFiles()">Analyze Files</button>
                     <div id="analyzeStatus" class="status-message"></div>
                 </div>
@@ -161,7 +158,7 @@
                 <div class="card" id="commVerifyMatrix" style="display:none;">
                     <h3>2. Verification Matrix</h3>
                     <p style="font-size: 13px; color: #666; margin-bottom: 15px;">
-                        Review the auto-detected insurers below. If an insurer says "Unknown" or is incorrect, manually select the correct company from the dropdown.
+                        Review the auto-detected insurers below. Change from dropdown if needed.
                     </p>
                     <div class="table-responsive-wrapper" style="margin-bottom: 20px;">
                         <table style="min-width: auto;">
@@ -192,7 +189,6 @@
     </main>
 
     <script>
-        // --- MIS SHELL JAVASCRIPT ---
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
         function switchPage(pageId, navElement) {
             document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active-page'));
@@ -202,7 +198,7 @@
             document.getElementById('topBarTitle').innerText = navElement.querySelector('.nav-text').innerText;
         }
 
-        // --- POLICY TOOL JAVASCRIPT (Intact) ---
+        // --- POLICY TOOL JAVASCRIPT ---
         let batchDataGlobal = null;
         let dynamicRosters = { rms: [], agents: [] };
         const BACKEND_URL = "https://policy-extractor.onrender.com"; 
@@ -379,15 +375,16 @@
             } catch (error) { alert(`Error: ${error.message}`); }
         }
 
-        // ==========================================
-        // PHASE 2: COMMISSION MODULE STAGED LOGIC
-        // ==========================================
-        
-        let selectedCommissionFiles = []; // Holds files globally for processing
-        let processedCommissionData = []; // Holds the standardized JSON response
+        // --- COMMISSION MODULE JAVASCRIPT ---
+        let selectedCommissionFiles = []; 
+        let processedCommissionData = []; 
 
-        // Master list of supported insurers for the override dropdown
-        const supportedInsurers = ["Bajaj Allianz", "Care Health", "Tata AIG", "Go Digit", "HDFC Ergo", "Unknown"];
+        // Perfectly synchronized with the Python dictionary!
+        const supportedInsurers = [
+            "Bajaj Allianz", "Care Health", "ICICI Lombard", "IndusInd", 
+            "Liberty", "National", "Royal Sundaram", "Go Digit Life", 
+            "Go Digit General", "Tata AIG", "HDFC Ergo", "Unknown"
+        ];
 
         async function analyzeCommissionFiles() {
             const fileInput = document.getElementById('commissionFilesInput');
@@ -396,14 +393,14 @@
             const matrixContainer = document.getElementById('commVerifyMatrix');
             const tbody = document.getElementById('commVerifyTableBody');
 
-            if (fileInput.files.length === 0) { alert("Please select Excel/CSV files first!"); return; }
+            if (fileInput.files.length === 0) { alert("Please select Excel/CSV/PDF files first!"); return; }
 
             selectedCommissionFiles = Array.from(fileInput.files);
             const formData = new FormData();
             selectedCommissionFiles.forEach(f => formData.append("files", f));
 
             btn.disabled = true;
-            status.innerText = "⏳ Scanning files for insurer fingerprints...";
+            status.innerText = "⏳ Scanning files (including PDFs and XLSB) for insurer fingerprints...";
             matrixContainer.style.display = "none";
             document.getElementById('commFinalOutputCard').style.display = "none";
             tbody.innerHTML = "";
@@ -415,13 +412,11 @@
                 if (response.ok) {
                     status.innerText = "✅ Analysis complete. Please verify the insurers below.";
                     
-                    // Build the Verification Matrix Rows
                     result.results.forEach((item, index) => {
                         let optionsHTML = supportedInsurers.map(ins => 
                             `<option value="${ins}" ${item.detected_insurer === ins ? 'selected' : ''}>${ins}</option>`
                         ).join('');
                         
-                        // Highlight the row red/yellow if the system couldn't guess the insurer
                         let rowBg = item.detected_insurer === "Unknown" ? "background-color: #fff3cd;" : "";
 
                         tbody.innerHTML += `
@@ -452,7 +447,6 @@
             const btn = document.getElementById('processCommDataBtn');
             const finalOutput = document.getElementById('commFinalOutputCard');
             
-            // Gather the User-Verified Insurers directly from the generated dropdowns
             const selects = document.querySelectorAll('.comm-insurer-override-select');
             const verifiedInsurers = Array.from(selects).map(select => select.value);
 
@@ -461,7 +455,7 @@
             formData.append("insurers", JSON.stringify(verifiedInsurers));
 
             btn.disabled = true;
-            status.innerText = "⏳ Extracting and Standardizing data...";
+            status.innerText = "⏳ Standardizing multiple sheets and extracting PDFs (this may take a moment)...";
             finalOutput.style.display = "none";
 
             try {
@@ -469,7 +463,7 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    processedCommissionData = result.data; // Store for Excel download
+                    processedCommissionData = result.data; 
                     status.innerText = `✅ Success! Generated ${result.total_records} standardized records ready for export.`;
                     finalOutput.style.display = "block";
                 } else {
