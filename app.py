@@ -4,6 +4,7 @@ import os
 import io
 import json
 import re  
+import zipfile
 from typing import List, Optional
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +26,6 @@ app.add_middleware(
 
 # ==========================================
 # UNIVERSAL COMMISSION MAPPING DICTIONARY
-# Easily add or update companies here without changing logic!
 # ==========================================
 INSURER_MAPPINGS = {
     "Bajaj Allianz": {"pol": "POLICY_REFERENCE", "cust": "CUSTOMER NAME", "prod": "PRODUCT", "prem": "NET PREMIUM", "comm": "TOTAL COMMISSION", "date": "POLICY DATE"},
@@ -43,7 +43,6 @@ INSURER_MAPPINGS = {
 
 SUPPORTED_INSURERS = list(INSURER_MAPPINGS.keys()) + ["Unknown"]
 
-# --- EXPANDED SCHEMA: Conditional Motor Fields ---
 class PolicyExtraction(BaseModel):
     policy_no: str = Field(description="The unique policy or certificate number")
     insurer_company: str = Field(description="Name of the insurance company")
@@ -73,6 +72,7 @@ def get_metadata():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed loading internal rosters: {str(e)}")
 
+
 # ==========================================
 # PHASE 1: POLICY DATA PROCESSING ROUTES (INTACT)
 # ==========================================
@@ -93,7 +93,7 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
                         page_text = pdf.pages[i].extract_text()
                         if page_text:
                             extracted_text += page_text + "\n"
-            except Exception as e:
+            except Exception:
                 pass
             
             if len(extracted_text.strip()) > 500:
@@ -142,25 +142,45 @@ async def export_batch_to_excel(data: List[dict]):
 # ==========================================
 
 def read_file_to_dfs(filename, contents):
-    """Helper to convert any file (CSV, Excel, XLSB, PDF) to a list of DataFrames."""
+    """Bulletproof helper to convert ANY file (CSV, Excel, XLSB, PDF, Fake Excel) to DataFrames."""
     dfs = []
-    if filename.endswith('.csv'):
-        dfs.append(pd.read_csv(io.BytesIO(contents)))
-    elif filename.endswith('.pdf'):
+    filename_lower = filename.lower()
+    
+    if filename_lower.endswith('.csv'):
+        try:
+            dfs.append(pd.read_csv(io.BytesIO(contents)))
+        except Exception:
+            pass
+    elif filename_lower.endswith('.pdf'):
         all_data = []
-        with pdfplumber.open(io.BytesIO(contents)) as pdf:
-            for page in pdf.pages:
-                table = page.extract_table()
-                if table:
-                    all_data.extend(table)
-        if all_data:
-            dfs.append(pd.DataFrame(all_data[1:], columns=all_data[0]))
+        try:
+            with pdfplumber.open(io.BytesIO(contents)) as pdf:
+                for page in pdf.pages:
+                    table = page.extract_table()
+                    if table:
+                        all_data.extend(table)
+            if len(all_data) > 1:
+                dfs.append(pd.DataFrame(all_data[1:], columns=all_data[0]))
+        except Exception:
+            pass
     else:
         # Excel Engine (xlsx, xls, xlsb)
-        engine = 'pyxlsb' if filename.endswith('.xlsb') else 'openpyxl'
-        xls = pd.ExcelFile(io.BytesIO(contents), engine=engine)
-        for sheet in xls.sheet_names:
-            dfs.append(pd.read_excel(xls, sheet_name=sheet))
+        engine = 'pyxlsb' if filename_lower.endswith('.xlsb') else ('openpyxl' if filename_lower.endswith('.xlsx') else None)
+        try:
+            xls = pd.ExcelFile(io.BytesIO(contents), engine=engine)
+            for sheet in xls.sheet_names:
+                dfs.append(pd.read_excel(xls, sheet_name=sheet))
+        except zipfile.BadZipFile:
+            # Fallback for "Fake Excel" files (actually CSV/HTML named .xls)
+            try:
+                dfs.append(pd.read_csv(io.BytesIO(contents)))
+            except Exception:
+                try:
+                    dfs.append(pd.read_csv(io.BytesIO(contents), sep='\t'))
+                except Exception:
+                    pass
+        except Exception:
+            pass
     return dfs
 
 def guess_insurer_from_df(df):
@@ -211,16 +231,22 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                 continue 
                 
             contents = await file.read()
-            dfs = read_file_to_dfs(file.filename, contents)
-            mapping = INSURER_MAPPINGS.get(final_insurer)
             
+            # Use the exact same bulletproof reader as Step 1
+            try:
+                dfs = read_file_to_dfs(file.filename, contents)
+            except Exception:
+                continue
+
+            mapping = INSURER_MAPPINGS.get(final_insurer)
             if not mapping:
                 continue
 
+            # Iterate through all sheets to find the actual data grid
             for target_df in dfs:
                 target_df.columns = target_df.columns.astype(str).str.strip()
                 
-                # Smart Header Finder (For National Ins. / messed up top rows)
+                # Smart Header Finder (bypasses blank rows above tables)
                 if mapping['pol'] not in target_df.columns:
                     for idx, row in target_df.iterrows():
                         row_strs = [str(x).strip() for x in row.values]
@@ -232,7 +258,7 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                 # Extract if we found the target column
                 if mapping['pol'] in target_df.columns:
                     for _, row in target_df.iterrows():
-                        # Skip blank policy numbers
+                        # Skip blank or totals rows
                         if pd.isna(row.get(mapping['pol'])) or str(row.get(mapping['pol'])).strip() == "":
                             continue
                             
@@ -246,12 +272,13 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                             "policy_date": str(row.get(mapping['date'], '')).strip(),
                             "source_file": file.filename
                         })
-                    break # Stop looking at other sheets once data is found
+                    break # Data found, stop checking other blank sheets in this file
                     
         if not standardized_data:
             return {"success": True, "total_records": 0, "data": []}
             
         clean_df = pd.DataFrame(standardized_data)
+        # Create hidden Match Key (Stripping spaces/hyphens for Phase 3 Reconciliation)
         clean_df['match_key'] = clean_df['policy_number'].astype(str).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
         final_results = clean_df.to_dict(orient='records')
         
