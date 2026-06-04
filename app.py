@@ -26,20 +26,20 @@ app.add_middleware(
 
 # ==========================================
 # UNIVERSAL FUZZY MAPPING DICTIONARY
-# Values are now LISTS of possible column names (aliases)
+# (Expanded aliases to catch any variations without scrambling)
 # ==========================================
 INSURER_MAPPINGS = {
-    "Bajaj Allianz": {"pol": ["POLICY_REFERENCE", "Policy No", "Policy Number", "Policy No."], "cust": ["CUSTOMER NAME", "Insured Name", "Customer Name"], "prod": ["PRODUCT", "Product Name"], "prem": ["NET PREMIUM", "Premium", "Gross Premium"], "comm": ["TOTAL COMMISSION", "Commission"], "date": ["POLICY DATE", "Policy Date"]},
-    "Care Health": {"pol": ["Policy No", "Policy Number"], "cust": ["Customer Name", "Insured Name"], "prod": ["Type", "Product Name"], "prem": ["Premium", "Gross Premium"], "comm": ["Total Amount", "Commission", "Total Commission"], "date": ["Effective Date/Policy Start date", "Policy Date", "Effective Date"]},
-    "ICICI Lombard": {"pol": ["POLICY_NUMBER", "Policy Number", "Policy No"], "cust": ["INSURED_CUSTOMER_NAME", "Customer Name"], "prod": ["PRODUCT_NAME", "Product Name"], "prem": ["TOTAL_PREMIUM_RECEIVED", "Premium", "Gross Premium"], "comm": ["ACTUAL_COMMISSION", "Commission"], "date": ["POLICY_START_DATE", "Policy Date"]},
-    "IndusInd": {"pol": ["PolicyNumber", "Policy No", "Policy Number"], "cust": ["InsuredName", "Customer Name"], "prod": ["ProductCode", "Product Name"], "prem": ["PremiumAmount", "Premium"], "comm": ["FinalIRDAComm", "Commission", "Final Commission"], "date": ["Month", "Policy Date"]},
-    "Liberty": {"pol": ["POLICY/ENDORSEMENT NO.", "Policy No", "Policy Number"], "cust": ["INSURED NAME", "Customer Name"], "prod": ["PRODUCT NAME"], "prem": ["GWP", "Premium", "Gross Premium"], "comm": ["FINAL COMM TO BE PAID", "Commission", "Total Commission"], "date": ["POLICY START DATE", "Policy Date"]},
+    "Bajaj Allianz": {"pol": ["POLICY_REFERENCE", "Policy No", "Policy Number"], "cust": ["CUSTOMER NAME", "Insured Name"], "prod": ["PRODUCT", "Product Name"], "prem": ["NET PREMIUM", "Premium", "Gross Premium"], "comm": ["TOTAL COMMISSION", "Commission"], "date": ["POLICY DATE", "Policy Date"]},
+    "Care Health": {"pol": ["Policy No", "Policy Number"], "cust": ["Customer Name", "Insured Name"], "prod": ["Type", "Product Name", "Product"], "prem": ["Premium", "Gross Premium"], "comm": ["Total Amount", "Commission", "Total Commission"], "date": ["Effective Date/Policy Start date", "Policy Date", "Effective Date"]},
+    "ICICI Lombard": {"pol": ["POLICY_NUMBER", "Policy Number", "Policy No"], "cust": ["INSURED_CUSTOMER_NAME", "Customer Name", "Insured Name"], "prod": ["PRODUCT_NAME", "Product Name"], "prem": ["TOTAL_PREMIUM_RECEIVED", "Premium"], "comm": ["ACTUAL_COMMISSION", "Commission", "Total Billed"], "date": ["POLICY_START_DATE", "Policy Date"]},
+    "IndusInd": {"pol": ["PolicyNumber", "Policy No"], "cust": ["InsuredName", "Customer Name"], "prod": ["ProductCode", "Product Name"], "prem": ["PremiumAmount", "Premium"], "comm": ["FinalIRDAComm", "Commission"], "date": ["Month", "Policy Date"]},
+    "Liberty": {"pol": ["POLICY/ENDORSEMENT NO.", "Policy No"], "cust": ["INSURED NAME", "Customer Name"], "prod": ["PRODUCT NAME", "Product"], "prem": ["GWP", "Premium", "Gross Premium"], "comm": ["FINAL COMM TO BE PAID", "Commission", "Total Commission"], "date": ["POLICY START DATE", "Policy Date"]},
     "National": {"pol": ["Policy #-Endo#", "Policy No", "Policy Number"], "cust": ["Insured Name", "Customer Name"], "prod": ["Prdt Code", "Product Name"], "prem": ["Premium Amount", "Premium"], "comm": ["Commission Amount", "Commission"], "date": ["Effective Date", "Policy Date"]},
-    "Royal Sundaram": {"pol": ["POLICY ID", "Policy No", "Policy Number"], "cust": ["CLIENT NAME", "Customer Name"], "prod": ["PRODUCT CATEGORY 2", "Product Name"], "prem": ["GROSS WRITTEN PREMIUM", "Premium"], "comm": ["TOTAL COMMISSION", "Commission"], "date": ["POLICY ENTRY DATE", "Policy Date"]},
-    "Go Digit Life": {"pol": ["Policy Number", "Policy No"], "cust": ["Policy Holder Name", "Customer Name"], "prod": ["Product Name", "Product"], "prem": ["Net Premium", "Premium"], "comm": ["Total Commission Amount", "Commission"], "date": ["Policy Start Date", "Policy Date"]},
-    "Go Digit General": {"pol": ["Policy Number", "Policy No"], "cust": ["Customer Name", "Insured Name"], "prod": ["Product Name", "Product"], "prem": ["Gross Premium", "Premium"], "comm": ["Total Commission", "Commission"], "date": ["Policy Issue Date", "Policy Date"]},
-    "Tata AIG": {"pol": ["Policy No", "Policy Number", "Policy No."], "cust": ["Insured Name", "Customer Name"], "prod": ["Product", "Product Name"], "prem": ["Premium", "Gross Premium"], "comm": ["Commission", "Total Commission"], "date": ["Policy Date"]},
-    "HDFC Ergo": {"pol": ["Policy Number", "Policy No", "Policy No."], "cust": ["Customer Name", "Insured Name"], "prod": ["Product Name", "Product"], "prem": ["Premium", "Gross Premium"], "comm": ["Commission", "Total Commission"], "date": ["Policy Date"]}
+    "Royal Sundaram": {"pol": ["POLICY ID", "Policy No"], "cust": ["CLIENT NAME", "Customer Name"], "prod": ["PRODUCT CATEGORY 2", "Product Name"], "prem": ["GROSS WRITTEN PREMIUM", "Premium"], "comm": ["TOTAL COMMISSION", "Commission"], "date": ["POLICY ENTRY DATE", "Policy Date"]},
+    "Go Digit Life": {"pol": ["Policy Number", "Policy No"], "cust": ["Policy Holder Name", "Customer Name"], "prod": ["Product Name", "Product Code"], "prem": ["Net Premium", "Premium"], "comm": ["Total Commission Amount", "Commission"], "date": ["Policy Start Date", "Policy Date"]},
+    "Go Digit General": {"pol": ["Policy Number", "Policy No.", "Policy No"], "cust": ["Customer Name", "Insured Name"], "prod": ["Product Name", "Product"], "prem": ["Gross Premium", "Net Premium", "Premium"], "comm": ["Total Commission", "Commission"], "date": ["Policy Issue Date", "Policy Date", "Policy Start Date"]},
+    "Tata AIG": {"pol": ["Policy No", "Policy Number"], "cust": ["Insured Name", "Customer Name"], "prod": ["Product", "Product Name"], "prem": ["Premium", "Gross Premium"], "comm": ["Commission", "Total Commission"], "date": ["Policy Date", "Policy Start Date"]},
+    "HDFC Ergo": {"pol": ["Policy Number", "Policy No.", "Policy No"], "cust": ["Customer Name", "Insured Name"], "prod": ["Product Name", "Product"], "prem": ["Premium", "Gross Premium", "Net Premium"], "comm": ["Commission", "Total Commission", "Brokerage"], "date": ["Policy Date", "Policy Start Date", "Transaction Date"]}
 }
 
 SUPPORTED_INSURERS = list(INSURER_MAPPINGS.keys()) + ["Unknown"]
@@ -143,32 +143,41 @@ async def export_batch_to_excel(data: List[dict]):
 # ==========================================
 
 def safe_float(val):
-    """Safely converts messy strings like ' 12,345.67 ' or '₹500' to a clean float"""
+    """Aggressively extracts numbers to prevent sequence crashes from weird characters"""
     if pd.isna(val) or val is None or str(val).strip() == "":
         return 0.0
-    val_str = str(val).replace(',', '').replace('₹', '').replace('Rs', '').replace(' ', '')
+    val_str = str(val).strip()
+    # Remove obvious non-number strings
+    if val_str.lower() in ['nil', 'na', 'n/a', '-']:
+        return 0.0
+    # Use Regex to strip anything that is NOT a digit, decimal, or negative sign
+    clean_val = re.sub(r'[^\d.-]', '', val_str)
     try:
-        return float(val_str)
+        return float(clean_val) if clean_val else 0.0
     except ValueError:
         return 0.0
 
 def get_col_name(columns, aliases):
-    """Fuzzy checks column headers against known aliases"""
-    for col in columns:
-        clean_col = str(col).strip().lower()
-        for alias in aliases:
-            if clean_col == alias.lower():
-                return col
-    # Ultimate Fallback: if it's the policy column, look for the word "policy"
-    if aliases and "policy" in aliases[0].lower():
-        for col in columns:
-            clean_col = str(col).strip().lower()
-            if "policy no" in clean_col or "policy num" in clean_col or "policy_no" in clean_col:
-                return col
+    """Highly robust fuzzy mapper that prevents False Positives"""
+    clean_cols = [str(c).strip().lower().replace('\n', ' ').replace('\r', '') for c in columns]
+    
+    # Pass 1: Look for an EXACT match
+    for alias in aliases:
+        clean_alias = alias.lower().strip()
+        if clean_alias in clean_cols:
+            return columns[clean_cols.index(clean_alias)]
+            
+    # Pass 2: Look for a CONTAINMENT match (e.g., "policy no" matches "policy no.")
+    for alias in aliases:
+        clean_alias = alias.lower().strip()
+        for i, c in enumerate(clean_cols):
+            if clean_alias in c:
+                return columns[i]
+                
     return None
 
 def read_file_to_dfs(filename, contents):
-    """Reads files aggressively, using string dtype to prevent Pandas crashes on bad data"""
+    """Reads files as strictly string DataFrames to avoid Pandas inference crashes"""
     dfs = []
     filename_lower = filename.lower()
     
@@ -177,7 +186,6 @@ def read_file_to_dfs(filename, contents):
             dfs.append(pd.read_csv(io.BytesIO(contents), dtype=str))
         except Exception:
             try:
-                # Fallback for weird Windows CSV encodings
                 dfs.append(pd.read_csv(io.BytesIO(contents), encoding='cp1252', dtype=str, on_bad_lines='skip'))
             except Exception:
                 pass
@@ -238,7 +246,7 @@ async def analyze_commission_files(files: List[UploadFile] = File(...)):
                         break
                         
             results.append({"filename": file.filename, "detected_insurer": detected})
-        except Exception as e:
+        except Exception:
             results.append({"filename": file.filename, "detected_insurer": "Error Reading File"})
             
     return {"success": True, "results": results}
@@ -263,10 +271,9 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
 
             for target_df in dfs:
                 target_df.columns = target_df.columns.astype(str).str.strip()
-                
                 pol_col = get_col_name(target_df.columns, mapping['pol'])
                 
-                # Smart Header Finder (bypasses blank rows above tables)
+                # Smart Header Finder (bypasses blank rows above tables like National Insurance)
                 if not pol_col:
                     for idx, row in target_df.iterrows():
                         row_strs = [str(x).strip() for x in row.values]
@@ -277,8 +284,8 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                             pol_col = found_pol
                             break
                 
+                # If we finally found the Policy Number column, extract the sheet!
                 if pol_col:
-                    # Dynamically resolve all other columns using the alias system
                     cust_col = get_col_name(target_df.columns, mapping['cust'])
                     prod_col = get_col_name(target_df.columns, mapping['prod'])
                     prem_col = get_col_name(target_df.columns, mapping['prem'])
@@ -287,8 +294,7 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                     
                     for _, row in target_df.iterrows():
                         pol_val = str(row.get(pol_col, '')).strip()
-                        # Skip blank rows or rows where Pandas read empty cells as 'nan'
-                        if pd.isna(row.get(pol_col)) or pol_val == "" or pol_val.lower() == "nan":
+                        if pd.isna(row.get(pol_col)) or pol_val == "" or pol_val.lower() == "nan" or "total" in pol_val.lower():
                             continue
                             
                         standardized_data.append({
@@ -301,7 +307,7 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                             "policy_date": str(row.get(date_col, '')) if date_col else "",
                             "source_file": file.filename
                         })
-                    break # Data extracted, stop checking other blank sheets in this file
+                    break # Data extracted successfully, stop looking at other sheets in this specific file
                     
         if not standardized_data:
             return {"success": True, "total_records": 0, "data": []}
