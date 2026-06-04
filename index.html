@@ -3,136 +3,246 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Policy Data Processing Tool</title>
+    <title>Enterprise MIS - Policy Management</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <style>
-        /* Modern Fluid UX Foundation - Auto-scaling padding/widths based on viewport bounds */
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 1400px; margin: 0 auto; padding: 20px; color: #333; background-color: #fcfcfc; line-height: 1.4; }
-        h2 { margin: 15px 0 25px 0; font-size: 1.6rem; text-align: center; color: #111; }
+        /* --- NEW MIS SHELL CSS --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         
+        body { display: flex; height: 100vh; background-color: #f4f6f9; color: #333; overflow: hidden; }
+        
+        /* Sidebar Styles */
+        .sidebar { width: 250px; background-color: #343a40; color: #fff; display: flex; flex-direction: column; transition: width 0.3s ease; z-index: 1000; }
+        .sidebar.collapsed { width: 70px; }
+        
+        .sidebar-header { padding: 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #4b545c; }
+        .sidebar-header h2 { font-size: 1.2rem; white-space: nowrap; overflow: hidden; transition: opacity 0.3s; }
+        .sidebar.collapsed .sidebar-header h2 { opacity: 0; width: 0; }
+        .hamburger-btn { background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; }
+        
+        .nav-menu { list-style: none; margin-top: 20px; flex: 1; }
+        .nav-item { padding: 15px 20px; display: flex; align-items: center; cursor: pointer; transition: background 0.2s; border-left: 4px solid transparent; }
+        .nav-item:hover { background-color: #495057; }
+        .nav-item.active { background-color: #007bff; border-left-color: #fff; }
+        .nav-icon { min-width: 30px; font-size: 1.2rem; text-align: center; }
+        .nav-text { margin-left: 10px; white-space: nowrap; overflow: hidden; transition: opacity 0.3s; }
+        .sidebar.collapsed .nav-text { opacity: 0; width: 0; }
+        
+        /* Main Content Area */
+        .main-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+        .top-bar { background-color: #fff; padding: 15px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; align-items: center; border-bottom: 1px solid #e0e0e0; }
+        .top-bar h1 { font-size: 1.4rem; color: #111; }
+        
+        .page-container { padding: 25px; flex: 1; max-width: 1400px; margin: 0 auto; width: 100%; }
+        
+        /* Page Toggling Logic */
+        .page-section { display: none; animation: fadeIn 0.4s ease; }
+        .page-section.active-page { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* --- EXISTING POLICY TOOL CSS (Unchanged) --- */
         .card { border: 1px solid #e0e0e0; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.03); background-color: #fff; margin-bottom: 25px; }
         h3 { font-size: 1.1rem; margin-bottom: 15px; color: #495057; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px; }
-        .upload-section { margin-top: 15px; }
-        
-        /* Flexbox Meta Wrapper */
         .global-meta-box { display: flex; flex-wrap: wrap; gap: 20px; background-color: #f1f3f5; padding: 15px; border-radius: 6px; margin-bottom: 20px; align-items: center; }
         .meta-item { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 250px; }
         .global-meta-box select { flex: 1; padding: 10px 12px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; background: #fff; }
-        
         input[type="file"] { width: 100%; max-width: 400px; margin-bottom: 15px; display: block; font-size: 14px; }
-        
         button { background-color: #007bff; color: white; border: none; padding: 12px 24px; font-size: 14px; border-radius: 4px; cursor: pointer; font-weight: 500; transition: background 0.2s ease; width: auto; }
         button:hover:not(:disabled) { background-color: #0056b3; }
         button:disabled { background-color: #cccccc; cursor: not-allowed; }
-        
         #downloadBtn { background-color: #28a745; display: none; margin-top: 25px; width: 100%; font-size: 16px; padding: 15px; border-radius: 6px; }
         #downloadBtn:hover:not(:disabled) { background-color: #218838; }
-        
         .status-message { color: #007bff; font-weight: bold; margin-top: 15px; min-height: 20px; font-size: 14px; }
         .validation-warning { display: block; background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 12px 15px; border-radius: 4px; margin-top: 15px; font-weight: 500; font-size: 13px; }
-        
-        /* Technical Error Output Console Card Box */
         .error-console-box { border: 1px solid #f5c6cb; background-color: #f8d7da; padding: 20px; border-radius: 8px; margin-top: 25px; color: #721c24; display: none; }
         .error-console-box h4 { font-size: 14px; margin-bottom: 10px; font-weight: bold; display: flex; align-items: center; gap: 6px; }
         .error-log-list { list-style: square inside; font-family: monospace; font-size: 12px; line-height: 1.6; }
         .error-log-list li { margin-bottom: 4px; }
-        
-        /* Flexible Responsive Scroll Wrapper for Complex Spreadsheets */
         .table-responsive-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e0e0e0; border-radius: 6px; margin-top: 15px; }
-        
-        /* FIXED: Added 'table-layout: fixed' to strictly enforce column widths */
         table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; min-width: 1200px; table-layout: fixed; }
-        
-        /* FIXED: Added word-wrap attributes to prevent text bleed */
         th, td { border: 1px solid #e0e0e0; padding: 12px 10px; text-align: left; vertical-align: middle; word-wrap: break-word; overflow-wrap: break-word; }
         th { background-color: #f8f9fa; color: #495057; font-weight: 600; }
         tr:nth-child(even) { background-color: #fdfdfd; }
         .error-row { color: #dc3545; font-weight: bold; background-color: #fff5f5 !important; }
-        
-        /* UI Input Component Adjustments */
         input[type="text"], input[type="number"] { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; background-color: #fff; }
-        input[type="text"]:focus, input[type="number"]:focus { border-color: #80bdff; outline: 0; box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25); }
         .calc-field { font-weight: bold; color: #2b2b2b; background-color: #f8f9fa; text-align: right; padding-right: 15px; }
         .sub-id-label { display: block; font-size: 11px; color: #6c757d; margin-top: 4px; font-family: monospace; }
-        
-        /* NEW: Class to truncate long filenames nicely with "..." */
         .filename-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight: 600; display: block; }
-
-        @media (max-width: 576px) {
-            body { padding: 10px; }
-            button { width: 100%; text-align: center; }
-            .meta-item { min-width: 100%; }
-        }
+        
+        /* Placeholder specific styles */
+        .placeholder-card { text-align: center; padding: 50px; color: #6c757d; }
+        .placeholder-card i { font-size: 4rem; margin-bottom: 20px; color: #dee2e6; }
     </style>
 </head>
 <body>
 
-    <h2>Policy Data Processing Tool</h2>
-    
-    <div class="card">
-        <h3>1. Select Sales Period</h3>
-        <div class="global-meta-box">
-            <div class="meta-item">
-                <label style="min-width: 110px;"><strong>Business Month:</strong></label>
-                <select id="businessMonth" onchange="evaluateGridValidation()">
-                    <option value="">-- Choose Month --</option>
-                    <option value="January">January</option><option value="February">February</option>
-                    <option value="March">March</option><option value="April">April</option>
-                    <option value="May">May</option><option value="June">June</option>
-                    <option value="July">July</option><option value="August">August</option>
-                    <option value="September">September</option><option value="October">October</option>
-                    <option value="November">November</option><option value="December">December</option>
-                </select>
-            </div>
-            <div class="meta-item">
-                <label style="min-width: 100px;"><strong>Business Year:</strong></label>
-                <select id="businessYear" onchange="evaluateGridValidation()"></select>
-            </div>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h2>MIS Portal</h2>
+            <button class="hamburger-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
         </div>
+        <ul class="nav-menu">
+            <li class="nav-item" onclick="switchPage('dashboard-page', this)">
+                <i class="fas fa-chart-line nav-icon"></i><span class="nav-text">Dashboard</span>
+            </li>
+            <li class="nav-item active" onclick="switchPage('policy-page', this)">
+                <i class="fas fa-file-invoice nav-icon"></i><span class="nav-text">Policy Data</span>
+            </li>
+            <li class="nav-item" onclick="switchPage('commission-page', this)">
+                <i class="fas fa-coins nav-icon"></i><span class="nav-text">Commission Data</span>
+            </li>
+            <li class="nav-item" onclick="switchPage('reconciliation-page', this)">
+                <i class="fas fa-balance-scale nav-icon"></i><span class="nav-text">Reconciliation</span>
+            </li>
+            <li class="nav-item" onclick="switchPage('agent-page', this)">
+                <i class="fas fa-users nav-icon"></i><span class="nav-text">Agent Management</span>
+            </li>
+            <li class="nav-item" onclick="switchPage('invoice-page', this)">
+                <i class="fas fa-file-export nav-icon"></i><span class="nav-text">Invoicing</span>
+            </li>
+        </ul>
+    </nav>
 
-        <div class="upload-section">
-            <h3>2. Upload Policy Copy (PDFs)</h3>
-            <input type="file" id="batchFileInput" accept="application/pdf" multiple>
-            <button id="extractBtn" onclick="processBatch()">Extract All Files</button>
-            <div id="status" class="status-message"></div>
-        </div>
-    </div>
-
-    <div class="card" id="gridContainer" style="display:none;">
-        <h3>3. Verification Matrix</h3>
-        <div id="alertBanner" class="validation-warning">⚠️ Action Required: Please specify the Business Month/Year, assign a valid RM and Agent selection, and log all required numerical values (0 is allowed) to unlock final spreadsheet compiling capabilities.</div>
+    <main class="main-content">
         
-        <div class="table-responsive-wrapper">
-            <table id="resultTable">
-                <thead>
-                    <tr>
-                        <th style="width: 12%;">Source File</th>
-                        <th style="width: 15%;">Policy & Insurer Context</th>
-                        <th style="width: 13%;">Relationship Manager</th>
-                        <th style="width: 13%;">POSP / Agent Search</th>
-                        <th style="width: 9%;">Agent Comm. (%)</th>
-                        <th style="width: 10%;">Gross Premium</th>
-                        <th style="width: 10%;">Comm. Premium</th>
-                        <th style="width: 9%;">Brokerage Rate (%)</th>
-                        <th style="width: 9%;">Calc. Brokerage</th>
-                    </tr>
-                </thead>
-                <tbody id="tableBody"></tbody>
-            </table>
-        </div>
+        <header class="top-bar">
+            <h1 id="topBarTitle">Policy Data Processing</h1>
+        </header>
 
-        <datalist id="rmOptionsList"></datalist>
-        <datalist id="agentOptionsList"></datalist>
+        <div class="page-container">
 
-        <button id="downloadBtn" onclick="downloadBatchExcel()">Download Unified Excel Sheet</button>
-        
-        <div class="error-console-box" id="errorConsole">
-            <h4>❌ Parsing Failures Diagnostics Summary Log</h4>
-            <ul class="error-log-list" id="errorLogList"></ul>
+            <div id="dashboard-page" class="page-section">
+                <div class="card placeholder-card">
+                    <i class="fas fa-chart-pie"></i>
+                    <h2>Business Overview Dashboard</h2>
+                    <p>Live KPIs and financial data visualizations will be implemented here.</p>
+                </div>
+            </div>
+
+            <div id="policy-page" class="page-section active-page">
+                <div class="card">
+                    <h3>1. Select Sales Period</h3>
+                    <div class="global-meta-box">
+                        <div class="meta-item">
+                            <label style="min-width: 110px;"><strong>Business Month:</strong></label>
+                            <select id="businessMonth" onchange="evaluateGridValidation()">
+                                <option value="">-- Choose Month --</option>
+                                <option value="January">January</option><option value="February">February</option>
+                                <option value="March">March</option><option value="April">April</option>
+                                <option value="May">May</option><option value="June">June</option>
+                                <option value="July">July</option><option value="August">August</option>
+                                <option value="September">September</option><option value="October">October</option>
+                                <option value="November">November</option><option value="December">December</option>
+                            </select>
+                        </div>
+                        <div class="meta-item">
+                            <label style="min-width: 100px;"><strong>Business Year:</strong></label>
+                            <select id="businessYear" onchange="evaluateGridValidation()"></select>
+                        </div>
+                    </div>
+
+                    <div class="upload-section">
+                        <h3>2. Upload Policy Copy (PDFs)</h3>
+                        <input type="file" id="batchFileInput" accept="application/pdf" multiple>
+                        <button id="extractBtn" onclick="processBatch()">Extract All Files</button>
+                        <div id="status" class="status-message"></div>
+                    </div>
+                </div>
+
+                <div class="card" id="gridContainer" style="display:none;">
+                    <h3>3. Verification Matrix</h3>
+                    <div id="alertBanner" class="validation-warning">⚠️ Action Required: Please specify the Business Month/Year, assign a valid RM and Agent selection, and log all required numerical values (0 is allowed) to unlock final spreadsheet compiling capabilities.</div>
+                    
+                    <div class="table-responsive-wrapper">
+                        <table id="resultTable">
+                            <thead>
+                                <tr>
+                                    <th style="width: 12%;">Source File</th>
+                                    <th style="width: 15%;">Policy & Insurer Context</th>
+                                    <th style="width: 13%;">Relationship Manager</th>
+                                    <th style="width: 13%;">POSP / Agent Search</th>
+                                    <th style="width: 9%;">Agent Comm. (%)</th>
+                                    <th style="width: 10%;">Gross Premium</th>
+                                    <th style="width: 10%;">Comm. Premium</th>
+                                    <th style="width: 9%;">Brokerage Rate (%)</th>
+                                    <th style="width: 9%;">Calc. Brokerage</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody"></tbody>
+                        </table>
+                    </div>
+
+                    <datalist id="rmOptionsList"></datalist>
+                    <datalist id="agentOptionsList"></datalist>
+
+                    <button id="downloadBtn" onclick="downloadBatchExcel()">Download Unified Excel Sheet</button>
+                    
+                    <div class="error-console-box" id="errorConsole">
+                        <h4>❌ Parsing Failures Diagnostics Summary Log</h4>
+                        <ul class="error-log-list" id="errorLogList"></ul>
+                    </div>
+                </div>
+            </div>
+
+            <div id="commission-page" class="page-section">
+                <div class="card placeholder-card">
+                    <i class="fas fa-file-excel"></i>
+                    <h2>Commission Statement Processing</h2>
+                    <p>Module to ingest and structure end-of-month insurer commission sheets.</p>
+                </div>
+            </div>
+
+            <div id="reconciliation-page" class="page-section">
+                <div class="card placeholder-card">
+                    <i class="fas fa-search-dollar"></i>
+                    <h2>Policy vs. Commission Reconciliation</h2>
+                    <p>Engine to detect shortfalls, mismatched premiums, and missing policies.</p>
+                </div>
+            </div>
+
+            <div id="agent-page" class="page-section">
+                <div class="card placeholder-card">
+                    <i class="fas fa-id-card-alt"></i>
+                    <h2>Agent Payout Management</h2>
+                    <p>Module to calculate and prepare actual payout statements for POSPs.</p>
+                </div>
+            </div>
+
+            <div id="invoice-page" class="page-section">
+                <div class="card placeholder-card">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                    <h2>Automated Invoicing</h2>
+                    <p>Generate compliant GST invoices against insurance companies state-wise.</p>
+                </div>
+            </div>
+
         </div>
-    </div>
+    </main>
 
     <script>
+        // --- MIS SHELL JAVASCRIPT ---
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+        }
+
+        function switchPage(pageId, navElement) {
+            // Hide all pages
+            document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active-page'));
+            // Remove active class from all nav items
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            
+            // Show selected page and highlight menu
+            document.getElementById(pageId).classList.add('active-page');
+            navElement.classList.add('active');
+            
+            // Update Top Bar Title based on selected item text
+            document.getElementById('topBarTitle').innerText = navElement.querySelector('.nav-text').innerText;
+        }
+
+
+        // --- EXISTING POLICY TOOL JAVASCRIPT (Unchanged) ---
         let batchDataGlobal = null;
         let dynamicRosters = { rms: [], agents: [] };
         const BACKEND_URL = "https://policy-extractor.onrender.com"; 
@@ -247,9 +357,7 @@
                 tbody.innerHTML += `
                     <tr ${rowClass}>
                         <td>
-                            <div class="filename-truncate" title="${safeFilename}">
-                                ${safeFilename}
-                            </div>
+                            <div class="filename-truncate" title="${safeFilename}">${safeFilename}</div>
                         </td>
                         <td>
                             <div style="font-weight:600">${item.policy_no || 'Missing'}</div>
