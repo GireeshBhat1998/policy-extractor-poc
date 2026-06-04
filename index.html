@@ -4,24 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Enterprise MIS - Policy Management</title>
-    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <style>
-        /* --- NEW MIS SHELL CSS --- */
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        
         body { display: flex; height: 100vh; background-color: #f4f6f9; color: #333; overflow: hidden; }
         
         /* Sidebar Styles */
         .sidebar { width: 250px; background-color: #343a40; color: #fff; display: flex; flex-direction: column; transition: width 0.3s ease; z-index: 1000; }
         .sidebar.collapsed { width: 70px; }
-        
         .sidebar-header { padding: 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #4b545c; }
         .sidebar-header h2 { font-size: 1.2rem; white-space: nowrap; overflow: hidden; transition: opacity 0.3s; }
         .sidebar.collapsed .sidebar-header h2 { opacity: 0; width: 0; }
         .hamburger-btn { background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; }
-        
         .nav-menu { list-style: none; margin-top: 20px; flex: 1; }
         .nav-item { padding: 15px 20px; display: flex; align-items: center; cursor: pointer; transition: background 0.2s; border-left: 4px solid transparent; }
         .nav-item:hover { background-color: #495057; }
@@ -34,44 +28,36 @@
         .main-content { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
         .top-bar { background-color: #fff; padding: 15px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); display: flex; align-items: center; border-bottom: 1px solid #e0e0e0; }
         .top-bar h1 { font-size: 1.4rem; color: #111; }
-        
         .page-container { padding: 25px; flex: 1; max-width: 1400px; margin: 0 auto; width: 100%; }
-        
-        /* Page Toggling Logic */
         .page-section { display: none; animation: fadeIn 0.4s ease; }
         .page-section.active-page { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* --- EXISTING POLICY TOOL CSS (Unchanged) --- */
+        /* Shared Card Styles */
         .card { border: 1px solid #e0e0e0; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.03); background-color: #fff; margin-bottom: 25px; }
         h3 { font-size: 1.1rem; margin-bottom: 15px; color: #495057; border-bottom: 2px solid #f1f3f5; padding-bottom: 8px; }
         .global-meta-box { display: flex; flex-wrap: wrap; gap: 20px; background-color: #f1f3f5; padding: 15px; border-radius: 6px; margin-bottom: 20px; align-items: center; }
         .meta-item { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 250px; }
-        .global-meta-box select { flex: 1; padding: 10px 12px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; background: #fff; }
-        input[type="file"] { width: 100%; max-width: 400px; margin-bottom: 15px; display: block; font-size: 14px; }
-        button { background-color: #007bff; color: white; border: none; padding: 12px 24px; font-size: 14px; border-radius: 4px; cursor: pointer; font-weight: 500; transition: background 0.2s ease; width: auto; }
+        select, input[type="file"], input[type="text"], input[type="number"] { width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #ccc; font-size: 14px; background: #fff; }
+        
+        button { background-color: #007bff; color: white; border: none; padding: 12px 24px; font-size: 14px; border-radius: 4px; cursor: pointer; font-weight: 500; transition: background 0.2s ease; width: auto; margin-top: 10px;}
         button:hover:not(:disabled) { background-color: #0056b3; }
         button:disabled { background-color: #cccccc; cursor: not-allowed; }
-        #downloadBtn { background-color: #28a745; display: none; margin-top: 25px; width: 100%; font-size: 16px; padding: 15px; border-radius: 6px; }
-        #downloadBtn:hover:not(:disabled) { background-color: #218838; }
+        .btn-success { background-color: #28a745; }
+        .btn-success:hover:not(:disabled) { background-color: #218838; }
+        
         .status-message { color: #007bff; font-weight: bold; margin-top: 15px; min-height: 20px; font-size: 14px; }
         .validation-warning { display: block; background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 12px 15px; border-radius: 4px; margin-top: 15px; font-weight: 500; font-size: 13px; }
         .error-console-box { border: 1px solid #f5c6cb; background-color: #f8d7da; padding: 20px; border-radius: 8px; margin-top: 25px; color: #721c24; display: none; }
-        .error-console-box h4 { font-size: 14px; margin-bottom: 10px; font-weight: bold; display: flex; align-items: center; gap: 6px; }
         .error-log-list { list-style: square inside; font-family: monospace; font-size: 12px; line-height: 1.6; }
-        .error-log-list li { margin-bottom: 4px; }
-        .table-responsive-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #e0e0e0; border-radius: 6px; margin-top: 15px; }
+        
+        .table-responsive-wrapper { width: 100%; overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 6px; margin-top: 15px; }
         table { width: 100%; border-collapse: collapse; background: #fff; font-size: 13px; min-width: 1200px; table-layout: fixed; }
-        th, td { border: 1px solid #e0e0e0; padding: 12px 10px; text-align: left; vertical-align: middle; word-wrap: break-word; overflow-wrap: break-word; }
+        th, td { border: 1px solid #e0e0e0; padding: 12px 10px; text-align: left; vertical-align: middle; word-wrap: break-word; }
         th { background-color: #f8f9fa; color: #495057; font-weight: 600; }
         tr:nth-child(even) { background-color: #fdfdfd; }
-        .error-row { color: #dc3545; font-weight: bold; background-color: #fff5f5 !important; }
-        input[type="text"], input[type="number"] { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; background-color: #fff; }
         .calc-field { font-weight: bold; color: #2b2b2b; background-color: #f8f9fa; text-align: right; padding-right: 15px; }
-        .sub-id-label { display: block; font-size: 11px; color: #6c757d; margin-top: 4px; font-family: monospace; }
         .filename-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight: 600; display: block; }
-        
-        /* Placeholder specific styles */
         .placeholder-card { text-align: center; padding: 50px; color: #6c757d; }
         .placeholder-card i { font-size: 4rem; margin-bottom: 20px; color: #dee2e6; }
     </style>
@@ -84,41 +70,21 @@
             <button class="hamburger-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
         </div>
         <ul class="nav-menu">
-            <li class="nav-item" onclick="switchPage('dashboard-page', this)">
-                <i class="fas fa-chart-line nav-icon"></i><span class="nav-text">Dashboard</span>
-            </li>
-            <li class="nav-item active" onclick="switchPage('policy-page', this)">
-                <i class="fas fa-file-invoice nav-icon"></i><span class="nav-text">Policy Data</span>
-            </li>
-            <li class="nav-item" onclick="switchPage('commission-page', this)">
-                <i class="fas fa-coins nav-icon"></i><span class="nav-text">Commission Data</span>
-            </li>
-            <li class="nav-item" onclick="switchPage('reconciliation-page', this)">
-                <i class="fas fa-balance-scale nav-icon"></i><span class="nav-text">Reconciliation</span>
-            </li>
-            <li class="nav-item" onclick="switchPage('agent-page', this)">
-                <i class="fas fa-users nav-icon"></i><span class="nav-text">Agent Management</span>
-            </li>
-            <li class="nav-item" onclick="switchPage('invoice-page', this)">
-                <i class="fas fa-file-export nav-icon"></i><span class="nav-text">Invoicing</span>
-            </li>
+            <li class="nav-item" onclick="switchPage('dashboard-page', this)"><i class="fas fa-chart-line nav-icon"></i><span class="nav-text">Dashboard</span></li>
+            <li class="nav-item active" onclick="switchPage('policy-page', this)"><i class="fas fa-file-invoice nav-icon"></i><span class="nav-text">Policy Data</span></li>
+            <li class="nav-item" onclick="switchPage('commission-page', this)"><i class="fas fa-coins nav-icon"></i><span class="nav-text">Commission Data</span></li>
+            <li class="nav-item" onclick="switchPage('reconciliation-page', this)"><i class="fas fa-balance-scale nav-icon"></i><span class="nav-text">Reconciliation</span></li>
+            <li class="nav-item" onclick="switchPage('agent-page', this)"><i class="fas fa-users nav-icon"></i><span class="nav-text">Agent Management</span></li>
+            <li class="nav-item" onclick="switchPage('invoice-page', this)"><i class="fas fa-file-export nav-icon"></i><span class="nav-text">Invoicing</span></li>
         </ul>
     </nav>
 
     <main class="main-content">
-        
-        <header class="top-bar">
-            <h1 id="topBarTitle">Policy Data Processing</h1>
-        </header>
-
+        <header class="top-bar"><h1 id="topBarTitle">Policy Data Processing</h1></header>
         <div class="page-container">
 
             <div id="dashboard-page" class="page-section">
-                <div class="card placeholder-card">
-                    <i class="fas fa-chart-pie"></i>
-                    <h2>Business Overview Dashboard</h2>
-                    <p>Live KPIs and financial data visualizations will be implemented here.</p>
-                </div>
+                <div class="card placeholder-card"><i class="fas fa-chart-pie"></i><h2>Business Overview Dashboard</h2></div>
             </div>
 
             <div id="policy-page" class="page-section active-page">
@@ -126,7 +92,7 @@
                     <h3>1. Select Sales Period</h3>
                     <div class="global-meta-box">
                         <div class="meta-item">
-                            <label style="min-width: 110px;"><strong>Business Month:</strong></label>
+                            <label><strong>Business Month:</strong></label>
                             <select id="businessMonth" onchange="evaluateGridValidation()">
                                 <option value="">-- Choose Month --</option>
                                 <option value="January">January</option><option value="February">February</option>
@@ -138,14 +104,13 @@
                             </select>
                         </div>
                         <div class="meta-item">
-                            <label style="min-width: 100px;"><strong>Business Year:</strong></label>
+                            <label><strong>Business Year:</strong></label>
                             <select id="businessYear" onchange="evaluateGridValidation()"></select>
                         </div>
                     </div>
-
                     <div class="upload-section">
                         <h3>2. Upload Policy Copy (PDFs)</h3>
-                        <input type="file" id="batchFileInput" accept="application/pdf" multiple>
+                        <input type="file" id="batchFileInput" accept="application/pdf" multiple style="max-width:400px;">
                         <button id="extractBtn" onclick="processBatch()">Extract All Files</button>
                         <div id="status" class="status-message"></div>
                     </div>
@@ -153,8 +118,7 @@
 
                 <div class="card" id="gridContainer" style="display:none;">
                     <h3>3. Verification Matrix</h3>
-                    <div id="alertBanner" class="validation-warning">⚠️ Action Required: Please specify the Business Month/Year, assign a valid RM and Agent selection, and log all required numerical values (0 is allowed) to unlock final spreadsheet compiling capabilities.</div>
-                    
+                    <div id="alertBanner" class="validation-warning">⚠️ Action Required: Specify Month/Year, assign valid RM and Agent, and log numbers to unlock download.</div>
                     <div class="table-responsive-wrapper">
                         <table id="resultTable">
                             <thead>
@@ -173,76 +137,72 @@
                             <tbody id="tableBody"></tbody>
                         </table>
                     </div>
-
                     <datalist id="rmOptionsList"></datalist>
                     <datalist id="agentOptionsList"></datalist>
-
-                    <button id="downloadBtn" onclick="downloadBatchExcel()">Download Unified Excel Sheet</button>
-                    
+                    <button id="downloadBtn" class="btn-success" style="display:none; width:100%; margin-top:20px;" onclick="downloadBatchExcel()">Download Unified Excel Sheet</button>
                     <div class="error-console-box" id="errorConsole">
-                        <h4>❌ Parsing Failures Diagnostics Summary Log</h4>
-                        <ul class="error-log-list" id="errorLogList"></ul>
+                        <h4>❌ Parsing Failures</h4><ul class="error-log-list" id="errorLogList"></ul>
                     </div>
                 </div>
             </div>
 
             <div id="commission-page" class="page-section">
-                <div class="card placeholder-card">
-                    <i class="fas fa-file-excel"></i>
-                    <h2>Commission Statement Processing</h2>
-                    <p>Module to ingest and structure end-of-month insurer commission sheets.</p>
+                
+                <div class="card">
+                    <h3>1. Upload Commission Statements (Batch)</h3>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">
+                        Select all Excel (.xlsx) or CSV commission files for the month. The system will auto-detect the insurer based on the file headers.
+                    </p>
+                    <input type="file" id="commissionFilesInput" multiple accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" style="max-width:400px;">
+                    <button id="analyzeCommBtn" onclick="analyzeCommissionFiles()">Analyze Files</button>
+                    <div id="analyzeStatus" class="status-message"></div>
+                </div>
+
+                <div class="card" id="commVerifyMatrix" style="display:none;">
+                    <h3>2. Verification Matrix</h3>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">
+                        Review the auto-detected insurers below. If an insurer says "Unknown" or is incorrect, manually select the correct company from the dropdown.
+                    </p>
+                    <div class="table-responsive-wrapper" style="margin-bottom: 20px;">
+                        <table style="min-width: auto;">
+                            <thead>
+                                <tr>
+                                    <th style="width: 50%;">Source File Name</th>
+                                    <th style="width: 50%;">Identified Insurance Company</th>
+                                </tr>
+                            </thead>
+                            <tbody id="commVerifyTableBody"></tbody>
+                        </table>
+                    </div>
+                    <button id="processCommDataBtn" class="btn-success" onclick="processCommissionBatch()">Process Data & Generate Output</button>
+                    <div id="processCommStatus" class="status-message"></div>
+                </div>
+
+                <div class="card" id="commFinalOutputCard" style="display:none; border-left: 5px solid #28a745;">
+                    <h3>✅ Processing Complete</h3>
+                    <p style="margin-bottom: 15px;">All statements have been standardized, combined, and alphanumeric match keys generated.</p>
+                    <button id="downloadCommBtn" class="btn-success" onclick="downloadCommissionExcel()">Download Unified Commission Sheet</button>
                 </div>
             </div>
 
-            <div id="reconciliation-page" class="page-section">
-                <div class="card placeholder-card">
-                    <i class="fas fa-search-dollar"></i>
-                    <h2>Policy vs. Commission Reconciliation</h2>
-                    <p>Engine to detect shortfalls, mismatched premiums, and missing policies.</p>
-                </div>
-            </div>
-
-            <div id="agent-page" class="page-section">
-                <div class="card placeholder-card">
-                    <i class="fas fa-id-card-alt"></i>
-                    <h2>Agent Payout Management</h2>
-                    <p>Module to calculate and prepare actual payout statements for POSPs.</p>
-                </div>
-            </div>
-
-            <div id="invoice-page" class="page-section">
-                <div class="card placeholder-card">
-                    <i class="fas fa-file-invoice-dollar"></i>
-                    <h2>Automated Invoicing</h2>
-                    <p>Generate compliant GST invoices against insurance companies state-wise.</p>
-                </div>
-            </div>
-
+            <div id="reconciliation-page" class="page-section"><div class="card placeholder-card"><h2>Reconciliation</h2></div></div>
+            <div id="agent-page" class="page-section"><div class="card placeholder-card"><h2>Agent Management</h2></div></div>
+            <div id="invoice-page" class="page-section"><div class="card placeholder-card"><h2>Invoicing</h2></div></div>
         </div>
     </main>
 
     <script>
         // --- MIS SHELL JAVASCRIPT ---
-        function toggleSidebar() {
-            document.getElementById('sidebar').classList.toggle('collapsed');
-        }
-
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
         function switchPage(pageId, navElement) {
-            // Hide all pages
             document.querySelectorAll('.page-section').forEach(el => el.classList.remove('active-page'));
-            // Remove active class from all nav items
             document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-            
-            // Show selected page and highlight menu
             document.getElementById(pageId).classList.add('active-page');
             navElement.classList.add('active');
-            
-            // Update Top Bar Title based on selected item text
             document.getElementById('topBarTitle').innerText = navElement.querySelector('.nav-text').innerText;
         }
 
-
-        // --- EXISTING POLICY TOOL JAVASCRIPT (Unchanged) ---
+        // --- POLICY TOOL JAVASCRIPT (Intact) ---
         let batchDataGlobal = null;
         let dynamicRosters = { rms: [], agents: [] };
         const BACKEND_URL = "https://policy-extractor.onrender.com"; 
@@ -251,28 +211,17 @@
             const yearDropdown = document.getElementById('businessYear');
             const targetYear = new Date().getFullYear();
             yearDropdown.innerHTML = '<option value="">-- Choose Year --</option>';
-            
-            for (let y = targetYear - 2; y <= targetYear + 1; y++) {
-                yearDropdown.innerHTML += `<option value="${y}">${y}</option>`;
-            }
+            for (let y = targetYear - 2; y <= targetYear + 1; y++) { yearDropdown.innerHTML += `<option value="${y}">${y}</option>`; }
 
             try {
                 const response = await fetch(`${BACKEND_URL}/metadata`);
                 if (response.ok) {
                     dynamicRosters = await response.json();
-                    populateDatalistStructures();
+                    document.getElementById('rmOptionsList').innerHTML = dynamicRosters.rms.map(rm => `<option value="${rm}">`).join('');
+                    document.getElementById('agentOptionsList').innerHTML = dynamicRosters.agents.map(ag => `<option value="${ag.name} [${ag.id}]" data-id="${ag.id}" data-name="${ag.name}">`).join('');
                 }
-            } catch (err) { console.error("Roster synchronization breakdown exception: ", err); }
+            } catch (err) { console.error("Roster error: ", err); }
         });
-
-        function populateDatalistStructures() {
-            if(dynamicRosters.rms) {
-                document.getElementById('rmOptionsList').innerHTML = dynamicRosters.rms.map(rm => `<option value="${rm}">`).join('');
-            }
-            if(dynamicRosters.agents) {
-                document.getElementById('agentOptionsList').innerHTML = dynamicRosters.agents.map(ag => `<option value="${ag.name} [${ag.id}]" data-id="${ag.id}" data-name="${ag.name}">`).join('');
-            }
-        }
 
         async function processBatch() {
             const fileInput = document.getElementById('batchFileInput');
@@ -280,8 +229,7 @@
             const status = document.getElementById('status');
             const downloadBtn = document.getElementById('downloadBtn');
 
-            if (fileInput.files.length === 0) { alert("Please select one or more PDF files first!"); return; }
-
+            if (fileInput.files.length === 0) { alert("Please select PDFs!"); return; }
             const formData = new FormData();
             for (let i = 0; i < fileInput.files.length; i++) { formData.append("files", fileInput.files[i]); }
 
@@ -291,51 +239,24 @@
             document.getElementById('errorConsole').style.display = "none";
             document.getElementById('errorLogList').innerHTML = "";
             downloadBtn.style.display = "none";
-
-            const processingStages = [
-                "📡 Uploading documents securely to Render Cloud...",
-                "🔍 Extracting raw text layers via local engines...",
-                "🧠 Running Gemini AI schema mapping...",
-                "⚙️ Validating extracted data and motor fields...",
-                "📊 Finalizing matrix compilation..."
-            ];
-            
-            let stageIndex = 0;
-            status.innerText = processingStages[0];
-            
-            const liveCaptionTimer = setInterval(() => {
-                if (stageIndex < processingStages.length - 1) {
-                    stageIndex++;
-                    status.innerText = processingStages[stageIndex];
-                }
-            }, 3500);
+            status.innerText = "⏳ Processing documents in cloud...";
 
             try {
                 const response = await fetch(`${BACKEND_URL}/extract-batch`, { method: 'POST', body: formData });
                 const result = await response.json();
-                
-                clearInterval(liveCaptionTimer); 
-                
                 if (response.ok) {
                     batchDataGlobal = result.results;
                     renderOperationalGrid();
-                    status.innerHTML = "✅ <strong>Processing completed!</strong> Proceed to Verification Matrix below.";
-                } else {
-                    status.innerText = `❌ Critical Error: ${result.detail || 'Failed parsing package'}`;
-                }
-            } catch (error) {
-                clearInterval(liveCaptionTimer);
-                status.innerText = `❌ Failed to connect to backend service: ${error.message}`;
-            } finally {
-                extractBtn.disabled = false;
-            }
+                    status.innerHTML = "✅ <strong>Processing completed!</strong> Proceed to Verification Matrix.";
+                } else { status.innerText = `❌ Critical Error: ${result.detail}`; }
+            } catch (error) { status.innerText = `❌ Failed: ${error.message}`; } 
+            finally { extractBtn.disabled = false; }
         }
 
         function cleanIncomingNumber(val) {
             if (val === 0 || val === "0") return 0;
             if (!val) return 0;
-            const stringClean = String(val).replace(/,/g, '').trim();
-            const parsed = parseFloat(stringClean);
+            const parsed = parseFloat(String(val).replace(/,/g, '').trim());
             return isNaN(parsed) ? 0 : parsed;
         }
 
@@ -343,56 +264,31 @@
             const tbody = document.getElementById('tableBody');
             const consoleBox = document.getElementById('errorConsole');
             const logList = document.getElementById('errorLogList');
-            
-            tbody.innerHTML = "";
-            logList.innerHTML = "";
             let errorCount = 0;
             
             batchDataGlobal.forEach((item, index) => {
                 const isError = item.policy_no === "ERROR";
                 const rowClass = isError ? "class='error-row'" : "";
-                const cleanGross = cleanIncomingNumber(item.gross_premium);
                 const safeFilename = item.source_file || 'Unknown';
                 
                 tbody.innerHTML += `
                     <tr ${rowClass}>
-                        <td>
-                            <div class="filename-truncate" title="${safeFilename}">${safeFilename}</div>
-                        </td>
-                        <td>
-                            <div style="font-weight:600">${item.policy_no || 'Missing'}</div>
-                            <div style="font-size:11px; color:#555">${item.insurer_company || ''}</div>
-                        </td>
-                        <td>
-                            <input type="text" list="rmOptionsList" id="rmInput-${index}" placeholder="Type to search RM..." oninput="evaluateGridValidation()">
-                        </td>
-                        <td>
-                            <input type="text" list="agentOptionsList" id="agentInput-${index}" placeholder="Type name or ID..." oninput="extractAgentRosterContext(${index})">
-                            <span id="agentIdSpan-${index}" class="sub-id-label">ID: Not Selected</span>
-                        </td>
-                        <td>
-                            <input type="number" id="agentCommInput-${index}" placeholder="%" step="0.01" min="0" oninput="evaluateGridValidation()">
-                        </td>
-                        <td>
-                            <input type="number" id="grossInput-${index}" value="${cleanGross}" step="0.01" oninput="evaluateGridValidation()">
-                        </td>
-                        <td>
-                            <input type="number" id="premiumInput-${index}" placeholder="0.00" step="0.01" oninput="executeLiveRowMath(${index})">
-                        </td>
-                        <td>
-                            <input type="number" id="rateInput-${index}" placeholder="%" min="0" max="100" step="0.01" oninput="executeLiveRowMath(${index})">
-                        </td>
+                        <td><div class="filename-truncate" title="${safeFilename}">${safeFilename}</div></td>
+                        <td><div style="font-weight:600">${item.policy_no || 'Missing'}</div><div style="font-size:11px; color:#555">${item.insurer_company || ''}</div></td>
+                        <td><input type="text" list="rmOptionsList" id="rmInput-${index}" oninput="evaluateGridValidation()"></td>
+                        <td><input type="text" list="agentOptionsList" id="agentInput-${index}" oninput="extractAgentRosterContext(${index})"><span id="agentIdSpan-${index}" style="font-size: 11px; color: #666; display: block;">ID: Not Selected</span></td>
+                        <td><input type="number" id="agentCommInput-${index}" placeholder="%" step="0.01" min="0" oninput="evaluateGridValidation()"></td>
+                        <td><input type="number" id="grossInput-${index}" value="${cleanIncomingNumber(item.gross_premium)}" step="0.01" oninput="evaluateGridValidation()"></td>
+                        <td><input type="number" id="premiumInput-${index}" placeholder="0.00" step="0.01" oninput="executeLiveRowMath(${index})"></td>
+                        <td><input type="number" id="rateInput-${index}" placeholder="%" min="0" max="100" step="0.01" oninput="executeLiveRowMath(${index})"></td>
                         <td id="brokerageCalcCell-${index}" class="calc-field">0.00</td>
                     </tr>`;
-                    
                 if (isError && item.parsing_error) {
                     errorCount++;
                     logList.innerHTML += `<li><strong>${safeFilename}</strong>: ${item.parsing_error}</li>`;
                 }
             });
-            
             if (errorCount > 0) { consoleBox.style.display = "block"; }
-            
             document.getElementById('resultTable').style.display = "table";
             document.getElementById('downloadBtn').style.display = "inline-block";
             document.getElementById('gridContainer').style.display = "block";
@@ -417,14 +313,9 @@
 
         function executeLiveRowMath(idx) {
             const premVal = parseFloat(document.getElementById(`premiumInput-${idx}`).value) || 0;
-            const rateInput = document.getElementById(`rateInput-${idx}`);
-            let rateVal = parseFloat(rateInput.value) || 0;
-            
-            if (rateVal < 0) { rateVal = 0; rateInput.value = 0; }
-            if (rateVal > 100) { rateVal = 100; rateInput.value = 100; }
-            
-            const outcome = premVal * (rateVal / 100);
-            document.getElementById('brokerageCalcCell-' + idx).innerText = outcome.toFixed(2);
+            let rateVal = parseFloat(document.getElementById(`rateInput-${idx}`).value) || 0;
+            if (rateVal < 0) rateVal = 0; if (rateVal > 100) rateVal = 100;
+            document.getElementById('brokerageCalcCell-' + idx).innerText = (premVal * (rateVal / 100)).toFixed(2);
             evaluateGridValidation();
         }
 
@@ -432,9 +323,7 @@
             if (!batchDataGlobal) return;
             const monthSelection = document.getElementById('businessMonth').value;
             const yearSelection = document.getElementById('businessYear').value;
-            let checksPassed = true;
-            
-            if (!monthSelection || !yearSelection) checksPassed = false;
+            let checksPassed = !!(monthSelection && yearSelection);
             
             for (let i = 0; i < batchDataGlobal.length; i++) {
                 const rm = document.getElementById(`rmInput-${i}`).value;
@@ -446,20 +335,11 @@
                 const rate = document.getElementById(`rateInput-${i}`).value;
                 
                 if (!rm || !extractedCleanId || gross === "" || agentComm === "" || prem === "" || rate === "" || parseFloat(gross) < 0 || parseFloat(agentComm) < 0 || parseFloat(prem) < 0 || parseFloat(rate) < 0) {
-                    checksPassed = false;
-                    break;
+                    checksPassed = false; break;
                 }
             }
-            
-            const alertBanner = document.getElementById('alertBanner');
-            const downloadBtn = document.getElementById('downloadBtn');
-            if (checksPassed) {
-                alertBanner.style.display = "none";
-                downloadBtn.disabled = false;
-            } else {
-                alertBanner.style.display = "block";
-                downloadBtn.disabled = true;
-            }
+            document.getElementById('alertBanner').style.display = checksPassed ? "none" : "block";
+            document.getElementById('downloadBtn').disabled = !checksPassed;
         }
 
         async function downloadBatchExcel() {
@@ -470,54 +350,163 @@
             const structuralPayload = batchDataGlobal.map((item, idx) => {
                 const idSpan = document.getElementById(`agentIdSpan-${idx}`);
                 return {
-                    business_month: month,
-                    business_year: year,
-                    policy_number: item.policy_no,
-                    insurer_company: item.insurer_company,
-                    customer_name: item.customer_name,
-                    product_name: item.product_name,
+                    business_month: month, business_year: year,
+                    policy_number: item.policy_no, insurer_company: item.insurer_company,
+                    customer_name: item.customer_name, product_name: item.product_name,
                     gross_premium: parseFloat(document.getElementById(`grossInput-${idx}`).value) || 0,
-                    gst: cleanIncomingNumber(item.gst),
-                    policy_start_date: item.policy_start_date,
-                    policy_end_date: item.policy_end_date,
-                    
-                    is_motor_policy: item.is_motor_policy || false,
-                    rto_location: item.rto_location || "",
-                    vehicle_make_model: item.vehicle_make_model || "",
-                    fuel_type: item.fuel_type || "",
-                    cubic_capacity: item.cubic_capacity || "",
-                    mfg_or_reg_date: item.mfg_or_reg_date || "",
-                    
+                    gst: cleanIncomingNumber(item.gst), policy_start_date: item.policy_start_date, policy_end_date: item.policy_end_date,
+                    is_motor_policy: item.is_motor_policy || false, rto_location: item.rto_location || "",
+                    vehicle_make_model: item.vehicle_make_model || "", fuel_type: item.fuel_type || "",
+                    cubic_capacity: item.cubic_capacity || "", mfg_or_reg_date: item.mfg_or_reg_date || "",
                     relationship_manager: document.getElementById(`rmInput-${idx}`).value,
                     agent_id: idSpan ? (idSpan.getAttribute('data-clean-id') || "") : "",
                     agent_name: idSpan ? (idSpan.getAttribute('data-clean-name') || "") : "",
-                    
                     agent_commission_rate: parseFloat(document.getElementById(`agentCommInput-${idx}`).value) || 0,
                     commissionable_premium: parseFloat(document.getElementById(`premiumInput-${idx}`).value) || 0,
                     brokerage_rate_percent: parseFloat(document.getElementById(`rateInput-${idx}`).value) || 0,
                     calculated_brokerage: parseFloat(document.getElementById('brokerageCalcCell-' + idx).innerText) || 0,
-                    
                     source_file: item.source_file
                 };
             });
 
             try {
-                const response = await fetch(`${BACKEND_URL}/export-excel-batch`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(structuralPayload)
-                });
+                const response = await fetch(`${BACKEND_URL}/export-excel-batch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(structuralPayload) });
                 if (response.ok) {
-                    const blob = await response.blob();
+                    const blob = await response.blob(); const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url; a.download = `Operational_Report_${month}_${year}.xlsx`;
+                    document.body.appendChild(a); a.click(); a.remove();
+                } else { alert("Failed to generate Excel package."); }
+            } catch (error) { alert(`Error: ${error.message}`); }
+        }
+
+        // ==========================================
+        // PHASE 2: COMMISSION MODULE STAGED LOGIC
+        // ==========================================
+        
+        let selectedCommissionFiles = []; // Holds files globally for processing
+        let processedCommissionData = []; // Holds the standardized JSON response
+
+        // Master list of supported insurers for the override dropdown
+        const supportedInsurers = ["Bajaj Allianz", "Care Health", "Tata AIG", "Go Digit", "HDFC Ergo", "Unknown"];
+
+        async function analyzeCommissionFiles() {
+            const fileInput = document.getElementById('commissionFilesInput');
+            const status = document.getElementById('analyzeStatus');
+            const btn = document.getElementById('analyzeCommBtn');
+            const matrixContainer = document.getElementById('commVerifyMatrix');
+            const tbody = document.getElementById('commVerifyTableBody');
+
+            if (fileInput.files.length === 0) { alert("Please select Excel/CSV files first!"); return; }
+
+            selectedCommissionFiles = Array.from(fileInput.files);
+            const formData = new FormData();
+            selectedCommissionFiles.forEach(f => formData.append("files", f));
+
+            btn.disabled = true;
+            status.innerText = "⏳ Scanning files for insurer fingerprints...";
+            matrixContainer.style.display = "none";
+            document.getElementById('commFinalOutputCard').style.display = "none";
+            tbody.innerHTML = "";
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/analyze-commission-files`, { method: 'POST', body: formData });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    status.innerText = "✅ Analysis complete. Please verify the insurers below.";
+                    
+                    // Build the Verification Matrix Rows
+                    result.results.forEach((item, index) => {
+                        let optionsHTML = supportedInsurers.map(ins => 
+                            `<option value="${ins}" ${item.detected_insurer === ins ? 'selected' : ''}>${ins}</option>`
+                        ).join('');
+                        
+                        // Highlight the row red/yellow if the system couldn't guess the insurer
+                        let rowBg = item.detected_insurer === "Unknown" ? "background-color: #fff3cd;" : "";
+
+                        tbody.innerHTML += `
+                            <tr style="${rowBg}">
+                                <td><strong title="${item.filename}">${item.filename}</strong></td>
+                                <td>
+                                    <select class="comm-insurer-override-select" style="padding: 6px; margin: 0; width: 100%;">
+                                        ${optionsHTML}
+                                    </select>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    matrixContainer.style.display = "block";
+                } else {
+                    status.innerText = `❌ Error: ${result.detail}`;
+                }
+            } catch (error) {
+                status.innerText = `❌ Connection Error: ${error.message}`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function processCommissionBatch() {
+            const status = document.getElementById('processCommStatus');
+            const btn = document.getElementById('processCommDataBtn');
+            const finalOutput = document.getElementById('commFinalOutputCard');
+            
+            // Gather the User-Verified Insurers directly from the generated dropdowns
+            const selects = document.querySelectorAll('.comm-insurer-override-select');
+            const verifiedInsurers = Array.from(selects).map(select => select.value);
+
+            const formData = new FormData();
+            selectedCommissionFiles.forEach(f => formData.append("files", f));
+            formData.append("insurers", JSON.stringify(verifiedInsurers));
+
+            btn.disabled = true;
+            status.innerText = "⏳ Extracting and Standardizing data...";
+            finalOutput.style.display = "none";
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/process-commission-batch`, { method: 'POST', body: formData });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    processedCommissionData = result.data; // Store for Excel download
+                    status.innerText = `✅ Success! Generated ${result.total_records} standardized records ready for export.`;
+                    finalOutput.style.display = "block";
+                } else {
+                    status.innerText = `❌ Error: ${result.detail}`;
+                }
+            } catch (error) {
+                status.innerText = `❌ Connection Error: ${error.message}`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function downloadCommissionExcel() {
+            if (!processedCommissionData || processedCommissionData.length === 0) return;
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/export-commission-excel`, { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify(processedCommissionData) 
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob(); 
                     const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `Operational_Report_${month}_${year}.xlsx`;
-                    document.body.appendChild(a);
-                    a.click();
+                    const a = document.createElement('a'); 
+                    a.href = url; 
+                    a.download = `Unified_Commission_Statement.xlsx`;
+                    document.body.appendChild(a); 
+                    a.click(); 
                     a.remove();
-                } else { alert("Failed to generate Excel compilation sheet layout package."); }
-            } catch (error) { alert(`Error downloading workbook stream mapping execution: ${error.message}`); }
+                } else { 
+                    alert("Failed to generate Excel package."); 
+                }
+            } catch (error) { 
+                alert(`Error downloading Excel: ${error.message}`); 
+            }
         }
     </script>
 </body>
