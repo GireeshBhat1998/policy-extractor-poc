@@ -172,7 +172,7 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
 
             # Ensure we use the latest supported Gemini SDK model
             response = client.models.generate_content(
-                model="gemini-2.0-flash",
+                model="gemini-3.5-flash",
                 contents=prompt_contents,
                 config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=PolicyExtraction, temperature=0.0),
             )
