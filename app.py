@@ -148,7 +148,10 @@ def get_metadata():
 async def extract_multiple_policies(files: List[UploadFile] = File(...)):
     combined_results = []
     for file in files:
-        if not file.filename.endswith('.pdf'): continue  
+        # FIX 1: Make filename check case-insensitive (.PDF vs .pdf)
+        if not file.filename.lower().endswith('.pdf'): 
+            continue  
+            
         try:
             pdf_bytes = await file.read()
             extracted_text = ""
@@ -167,9 +170,9 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
             else:
                 prompt_contents = [types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"), "Analyze this scanned insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract."]
 
-            # Updated to standard SDK model name
+            # Ensure we use the latest supported Gemini SDK model
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.0-flash",
                 contents=prompt_contents,
                 config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=PolicyExtraction, temperature=0.0),
             )
@@ -221,11 +224,19 @@ def get_col_name(columns, aliases):
 def read_file_to_dfs(filename, contents):
     dfs = []
     filename_lower = filename.lower()
-    if filename_lower.endswith('.csv'):
-        try: dfs.append(pd.read_csv(io.BytesIO(contents), dtype=str))
+    
+    # FIX 2: Universal Fallback Reader for disguised Excel files
+    def safe_read_csv(content_bytes):
+        try: return pd.read_csv(io.BytesIO(content_bytes), dtype=str)
         except Exception:
-            try: dfs.append(pd.read_csv(io.BytesIO(contents), encoding='cp1252', dtype=str, on_bad_lines='skip'))
-            except Exception: pass
+            try: return pd.read_csv(io.BytesIO(content_bytes), encoding='cp1252', dtype=str, on_bad_lines='skip')
+            except Exception:
+                try: return pd.read_csv(io.BytesIO(content_bytes), sep='\t', dtype=str)
+                except Exception: return None
+
+    if filename_lower.endswith('.csv'):
+        res = safe_read_csv(contents)
+        if res is not None: dfs.append(res)
     elif filename_lower.endswith('.pdf'):
         all_data = []
         try:
@@ -241,10 +252,11 @@ def read_file_to_dfs(filename, contents):
             xls = pd.ExcelFile(io.BytesIO(contents), engine=engine)
             for sheet in xls.sheet_names:
                 dfs.append(pd.read_excel(xls, sheet_name=sheet, dtype=str))
-        except zipfile.BadZipFile:
-            try: dfs.append(pd.read_csv(io.BytesIO(contents), dtype=str))
-            except Exception: pass
-        except Exception: pass
+        except Exception:
+            # If Excel engines crash on .xlsb (because it's actually a CSV), forcefully read as CSV
+            res = safe_read_csv(contents)
+            if res is not None: dfs.append(res)
+            
     return dfs
 
 @app.post("/analyze-commission-files")
