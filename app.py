@@ -166,10 +166,15 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
             if len(extracted_text.strip()) > 500:
                 extracted_text = re.sub(r'\n{2,}', '\n', extracted_text)
                 extracted_text = re.sub(r'[ \t]{2,}', ' ', extracted_text)[:20000]
+# --- ADD THIS LOG ---
+                print(f"⚡ LOCAL SUCCESS: Extracted {len(extracted_text)} chars from {file.filename}")
                 prompt_contents = [f"Analyze this raw text extracted from an insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract.\n\nRAW TEXT:\n{extracted_text}"]
             else:
+                # --- ADD THIS LOG ---
+                print(f"⚠️ LOCAL FAILED (Scanned/Locked PDF): Bypassing to Gemini Vision for {file.filename}")
                 prompt_contents = [types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"), "Analyze this scanned insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract."]
-
+# --- ADD THIS LOG ---
+            print(f"⏳ Sending {file.filename} payload to Gemini API...")
             # Ensure we use the latest supported Gemini SDK model
             response = client.models.generate_content(
                 model="gemini-3.5-flash",
