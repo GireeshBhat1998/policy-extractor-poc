@@ -198,9 +198,13 @@
             document.getElementById('topBarTitle').innerText = navElement.querySelector('.nav-text').innerText;
         }
 
-        // --- POLICY TOOL JAVASCRIPT ---
+        // --- GLOBAL APP LOGIC ---
         let batchDataGlobal = null;
         let dynamicRosters = { rms: [], agents: [] };
+        
+        // DYNAMIC SYNC: The list of supported insurers is pulled from the backend on load
+        let supportedInsurers = ["Unknown"];
+
         const BACKEND_URL = "https://policy-extractor.onrender.com"; 
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -209,6 +213,7 @@
             yearDropdown.innerHTML = '<option value="">-- Choose Year --</option>';
             for (let y = targetYear - 2; y <= targetYear + 1; y++) { yearDropdown.innerHTML += `<option value="${y}">${y}</option>`; }
 
+            // 1. Fetch RMs and Agents
             try {
                 const response = await fetch(`${BACKEND_URL}/metadata`);
                 if (response.ok) {
@@ -217,8 +222,18 @@
                     document.getElementById('agentOptionsList').innerHTML = dynamicRosters.agents.map(ag => `<option value="${ag.name} [${ag.id}]" data-id="${ag.id}" data-name="${ag.name}">`).join('');
                 }
             } catch (err) { console.error("Roster error: ", err); }
+
+            // 2. Fetch Live Insurer Database for Dropdowns
+            try {
+                const insResponse = await fetch(`${BACKEND_URL}/api/insurers`);
+                if (insResponse.ok) {
+                    const insData = await insResponse.json();
+                    supportedInsurers = insData.insurers;
+                }
+            } catch (err) { console.error("Failed to load dynamic insurers list", err); }
         });
 
+        // --- POLICY TOOL JAVASCRIPT ---
         async function processBatch() {
             const fileInput = document.getElementById('batchFileInput');
             const extractBtn = document.getElementById('extractBtn');
@@ -379,13 +394,6 @@
         let selectedCommissionFiles = []; 
         let processedCommissionData = []; 
 
-        // Perfectly synchronized with the Python dictionary!
-        const supportedInsurers = [
-            "Bajaj Allianz", "Care Health", "ICICI Lombard", "IndusInd", 
-            "Liberty", "National", "Royal Sundaram", "Go Digit Life", 
-            "Go Digit General", "Tata AIG", "HDFC Ergo", "Unknown"
-        ];
-
         async function analyzeCommissionFiles() {
             const fileInput = document.getElementById('commissionFilesInput');
             const status = document.getElementById('analyzeStatus');
@@ -400,7 +408,7 @@
             selectedCommissionFiles.forEach(f => formData.append("files", f));
 
             btn.disabled = true;
-            status.innerText = "⏳ Scanning files (including PDFs and XLSB) for insurer fingerprints...";
+            status.innerText = "⏳ Scanning files for insurer names...";
             matrixContainer.style.display = "none";
             document.getElementById('commFinalOutputCard').style.display = "none";
             tbody.innerHTML = "";
@@ -413,6 +421,7 @@
                     status.innerText = "✅ Analysis complete. Please verify the insurers below.";
                     
                     result.results.forEach((item, index) => {
+                        // Dropdown perfectly matched with dynamic backend
                         let optionsHTML = supportedInsurers.map(ins => 
                             `<option value="${ins}" ${item.detected_insurer === ins ? 'selected' : ''}>${ins}</option>`
                         ).join('');
@@ -455,7 +464,7 @@
             formData.append("insurers", JSON.stringify(verifiedInsurers));
 
             btn.disabled = true;
-            status.innerText = "⏳ Standardizing multiple sheets and extracting PDFs (this may take a moment)...";
+            status.innerText = "⏳ Standardizing multiple sheets and formatting outputs...";
             finalOutput.style.display = "none";
 
             try {
