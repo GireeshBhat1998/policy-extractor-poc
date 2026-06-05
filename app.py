@@ -183,7 +183,7 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
 
             # Using Gemini 3.5 Flash for high-frequency processing speed
             response = client.models.generate_content(
-                model="gemini-3.5-flash",
+                model="gemini-3.1-flash-lite",
                 contents=prompt_contents,
                 config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=PolicyExtraction, temperature=0.0),
             )
