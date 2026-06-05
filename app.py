@@ -25,25 +25,55 @@ app.add_middleware(
 )
 
 # ==========================================
-# UNIVERSAL FUZZY MAPPING DICTIONARY
-# (Expanded aliases to catch any variations without scrambling)
+# LIVE EXCEL RULE MANAGER
+# Automatically reloads rules if the Excel file is modified
 # ==========================================
-INSURER_MAPPINGS = {
-    "Bajaj Allianz": {"pol": ["POLICY_REFERENCE", "Policy No", "Policy Number"], "cust": ["CUSTOMER NAME", "Insured Name"], "prod": ["PRODUCT", "Product Name"], "prem": ["NET PREMIUM", "Premium", "Gross Premium"], "comm": ["TOTAL COMMISSION", "Commission"], "date": ["POLICY DATE", "Policy Date"]},
-    "Care Health": {"pol": ["Policy No", "Policy Number"], "cust": ["Customer Name", "Insured Name"], "prod": ["Type", "Product Name", "Product"], "prem": ["Premium", "Gross Premium"], "comm": ["Total Amount", "Commission", "Total Commission"], "date": ["Effective Date/Policy Start date", "Policy Date", "Effective Date"]},
-    "ICICI Lombard": {"pol": ["POLICY_NUMBER", "Policy Number", "Policy No"], "cust": ["INSURED_CUSTOMER_NAME", "Customer Name", "Insured Name"], "prod": ["PRODUCT_NAME", "Product Name"], "prem": ["TOTAL_PREMIUM_RECEIVED", "Premium"], "comm": ["ACTUAL_COMMISSION", "Commission", "Total Billed"], "date": ["POLICY_START_DATE", "Policy Date"]},
-    "IndusInd": {"pol": ["PolicyNumber", "Policy No"], "cust": ["InsuredName", "Customer Name"], "prod": ["ProductCode", "Product Name"], "prem": ["PremiumAmount", "Premium"], "comm": ["FinalIRDAComm", "Commission"], "date": ["Month", "Policy Date"]},
-    "Liberty": {"pol": ["POLICY/ENDORSEMENT NO.", "Policy No"], "cust": ["INSURED NAME", "Customer Name"], "prod": ["PRODUCT NAME", "Product"], "prem": ["GWP", "Premium", "Gross Premium"], "comm": ["FINAL COMM TO BE PAID", "Commission", "Total Commission"], "date": ["POLICY START DATE", "Policy Date"]},
-    "National": {"pol": ["Policy #-Endo#", "Policy No", "Policy Number"], "cust": ["Insured Name", "Customer Name"], "prod": ["Prdt Code", "Product Name"], "prem": ["Premium Amount", "Premium"], "comm": ["Commission Amount", "Commission"], "date": ["Effective Date", "Policy Date"]},
-    "Royal Sundaram": {"pol": ["POLICY ID", "Policy No"], "cust": ["CLIENT NAME", "Customer Name"], "prod": ["PRODUCT CATEGORY 2", "Product Name"], "prem": ["GROSS WRITTEN PREMIUM", "Premium"], "comm": ["TOTAL COMMISSION", "Commission"], "date": ["POLICY ENTRY DATE", "Policy Date"]},
-    "Go Digit Life": {"pol": ["Policy Number", "Policy No"], "cust": ["Policy Holder Name", "Policy Holder", "Customer Name"], "prod": ["Product Name", "Product Code"], "prem": ["Net Premium", "Premium"], "comm": ["Total Commission Amount", "Commission"], "date": ["Policy Start Date", "Policy Issue Date", "Policy Date"]},
-    "Go Digit General": {"pol": ["Policy Number", "Policy No.", "Policy No"], "cust": ["Customer Name", "Insured Name"], "prod": ["Product Name", "Product"], "prem": ["Gross Premium", "Net Premium", "Premium"], "comm": ["Total Commission", "Commission"], "date": ["Policy Issue Date", "Policy Date", "Policy Start Date"]},
-    "Tata AIG": {"pol": ["Policy No", "Policy Number"], "cust": ["Insured Name", "Customer Name"], "prod": ["Product", "Product Name"], "prem": ["Premium", "Gross Premium"], "comm": ["Commission", "Total Commission"], "date": ["Policy Date", "Policy Start Date"]},
-    "HDFC Ergo": {"pol": ["Policy Number", "Policy No.", "Policy No"], "cust": ["Customer Name", "Insured Name"], "prod": ["Product Name", "Product"], "prem": ["Premium", "Gross Premium", "Net Premium"], "comm": ["Commission", "Total Commission", "Brokerage"], "date": ["Policy Date", "Policy Start Date", "Transaction Date"]}
-}
+EXCEL_MASTER_FILE = "Insurer_Master_Mapping.xlsx"
+cached_mappings = {}
+last_modified_time = 0
 
-SUPPORTED_INSURERS = list(INSURER_MAPPINGS.keys()) + ["Unknown"]
+def get_latest_rules():
+    global cached_mappings, last_modified_time
+    
+    # Check if file exists
+    if not os.path.exists(EXCEL_MASTER_FILE):
+        print(f"WARNING: {EXCEL_MASTER_FILE} not found!")
+        return cached_mappings
 
+    # Check if file was modified since last load
+    current_mtime = os.path.getmtime(EXCEL_MASTER_FILE)
+    if current_mtime > last_modified_time:
+        print("Excel Database change detected. Reloading Rules...")
+        try:
+            df = pd.read_excel(EXCEL_MASTER_FILE)
+            new_rules = {}
+            for _, row in df.iterrows():
+                company = str(row.get('Insurer Company', '')).strip()
+                if pd.isna(company) or company == "nan" or not company:
+                    continue
+                
+                # Helper to split comma strings into clean lists
+                def clean_list(val):
+                    if pd.isna(val) or str(val).strip() == "": return []
+                    return [x.strip().lower() for x in str(val).split(',') if x.strip()]
+
+                new_rules[company] = {
+                    "pol": clean_list(row.get('pol_aliases', '')),
+                    "cust": clean_list(row.get('cust_aliases', '')),
+                    "prod": clean_list(row.get('prod_aliases', '')),
+                    "prem": clean_list(row.get('prem_aliases', '')),
+                    "comm": clean_list(row.get('comm_aliases', '')),
+                    "date": clean_list(row.get('date_aliases', ''))
+                }
+            cached_mappings = new_rules
+            last_modified_time = current_mtime
+            print(f"Rules reloaded successfully for {len(cached_mappings)} insurers.")
+        except Exception as e:
+            print(f"Error loading Excel rules: {e}")
+            
+    return cached_mappings
+
+# --- EXPANDED SCHEMA: Conditional Motor Fields (Phase 1) ---
 class PolicyExtraction(BaseModel):
     policy_no: str = Field(description="The unique policy or certificate number")
     insurer_company: str = Field(description="Name of the insurance company")
@@ -73,6 +103,9 @@ def get_metadata():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed loading internal rosters: {str(e)}")
 
+# ==========================================
+# PHASE 1: POLICY DATA PROCESSING ROUTES (INTACT)
+# ==========================================
 @app.post("/extract-batch")
 async def extract_multiple_policies(files: List[UploadFile] = File(...)):
     combined_results = []
@@ -133,60 +166,44 @@ async def export_batch_to_excel(data: List[dict]):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
-# PHASE 2: COMMISSION PROCESSING (UPGRADED CONFIDENCE SCORING)
+# PHASE 2: STRICT DETERMINISTIC COMMISSION PROCESSING
 # ==========================================
 
 def safe_float(val):
-    if pd.isna(val) or val is None or str(val).strip() == "":
-        return 0.0
+    if pd.isna(val) or val is None or str(val).strip() == "": return 0.0
     val_str = str(val).strip()
-    if val_str.lower() in ['nil', 'na', 'n/a', '-']:
-        return 0.0
+    if val_str.lower() in ['nil', 'na', 'n/a', '-']: return 0.0
     clean_val = re.sub(r'[^\d.-]', '', val_str)
-    try:
-        return float(clean_val) if clean_val else 0.0
-    except ValueError:
-        return 0.0
+    try: return float(clean_val) if clean_val else 0.0
+    except ValueError: return 0.0
 
 def get_col_name(columns, aliases):
+    """Strict Matcher based on Excel Master DB"""
     clean_cols = [str(c).strip().lower().replace('\n', ' ').replace('\r', '') for c in columns]
-    # Pass 1: Exact Match
     for alias in aliases:
-        clean_alias = alias.lower().strip()
-        if clean_alias in clean_cols:
-            return columns[clean_cols.index(clean_alias)]
-    # Pass 2: Containment
-    for alias in aliases:
-        clean_alias = alias.lower().strip()
-        for i, c in enumerate(clean_cols):
-            if clean_alias in c:
-                return columns[i]
+        if alias in clean_cols:
+            return columns[clean_cols.index(alias)]
     return None
 
 def read_file_to_dfs(filename, contents):
+    """Reads files strictly as strings to prevent Pandas formatting crashes"""
     dfs = []
     filename_lower = filename.lower()
     
     if filename_lower.endswith('.csv'):
-        try:
-            dfs.append(pd.read_csv(io.BytesIO(contents), dtype=str))
+        try: dfs.append(pd.read_csv(io.BytesIO(contents), dtype=str))
         except Exception:
-            try:
-                dfs.append(pd.read_csv(io.BytesIO(contents), encoding='cp1252', dtype=str, on_bad_lines='skip'))
-            except Exception:
-                pass
+            try: dfs.append(pd.read_csv(io.BytesIO(contents), encoding='cp1252', dtype=str, on_bad_lines='skip'))
+            except Exception: pass
     elif filename_lower.endswith('.pdf'):
         all_data = []
         try:
             with pdfplumber.open(io.BytesIO(contents)) as pdf:
                 for page in pdf.pages:
                     table = page.extract_table()
-                    if table:
-                        all_data.extend(table)
-            if len(all_data) > 1:
-                dfs.append(pd.DataFrame(all_data[1:], columns=all_data[0]))
-        except Exception:
-            pass
+                    if table: all_data.extend(table)
+            if len(all_data) > 1: dfs.append(pd.DataFrame(all_data[1:], columns=all_data[0]))
+        except Exception: pass
     else:
         engine = 'pyxlsb' if filename_lower.endswith('.xlsb') else ('openpyxl' if filename_lower.endswith('.xlsx') else None)
         try:
@@ -194,112 +211,59 @@ def read_file_to_dfs(filename, contents):
             for sheet in xls.sheet_names:
                 dfs.append(pd.read_excel(xls, sheet_name=sheet, dtype=str))
         except zipfile.BadZipFile:
-            try:
-                dfs.append(pd.read_csv(io.BytesIO(contents), dtype=str))
-            except Exception:
-                pass
-        except Exception:
-            pass
+            try: dfs.append(pd.read_csv(io.BytesIO(contents), dtype=str))
+            except Exception: pass
+        except Exception: pass
     return dfs
-
-def guess_insurer_from_df(df):
-    """Calculates a confidence score to prevent false-positive mapping"""
-    df.columns = df.columns.astype(str).str.strip()
-    
-    def score_cols(cols, mapping):
-        score = 0
-        if get_col_name(cols, mapping['pol']): score += 1
-        if get_col_name(cols, mapping['cust']): score += 1
-        if get_col_name(cols, mapping['prem']): score += 1
-        if get_col_name(cols, mapping['comm']): score += 1
-        return score
-
-    best_insurer = "Unknown"
-    max_score = 0
-    
-    # Scan standard headers
-    for insurer, mapping in INSURER_MAPPINGS.items():
-        score = score_cols(df.columns, mapping)
-        if score > max_score:
-            max_score = score
-            best_insurer = insurer
-            
-    if max_score >= 3:
-        return best_insurer
-        
-    # Scan hidden headers (first 15 rows)
-    for idx, row in df.head(15).iterrows():
-        row_strs = [str(x).strip() for x in row.values]
-        for insurer, mapping in INSURER_MAPPINGS.items():
-            score = score_cols(row_strs, mapping)
-            if score > max_score:
-                max_score = score
-                best_insurer = insurer
-        if max_score >= 3:
-            return best_insurer
-            
-    return "Unknown"
 
 @app.post("/analyze-commission-files")
 async def analyze_commission_files(files: List[UploadFile] = File(...)):
+    """Step 1: Uses Filename Routing (No scanning inside files) to populate Verification Matrix"""
+    mappings = get_latest_rules()
     results = []
+    
     for file in files:
-        try:
-            contents = await file.read()
-            dfs = read_file_to_dfs(file.filename, contents)
-            
-            detected = "Unknown"
-            for df in dfs:
-                detected = guess_insurer_from_df(df)
-                if detected != "Unknown":
-                    break
-            
-            if detected == "Unknown":
-                fname_lower = file.filename.lower()
-                for insurer in SUPPORTED_INSURERS:
-                    if insurer != "Unknown" and insurer.lower() in fname_lower:
-                        detected = insurer
-                        break
-                        
-            results.append({"filename": file.filename, "detected_insurer": detected})
-        except Exception:
-            results.append({"filename": file.filename, "detected_insurer": "Error Reading File"})
-            
+        fname_lower = file.filename.lower()
+        detected = "Unknown"
+        
+        # Check if any mapped company name exists in the uploaded file's name
+        for insurer in mappings.keys():
+            if insurer.lower() in fname_lower:
+                detected = insurer
+                break
+                
+        results.append({"filename": file.filename, "detected_insurer": detected})
+        
     return {"success": True, "results": results}
 
 @app.post("/process-commission-batch")
 async def process_commission_batch(files: List[UploadFile] = File(...), insurers: str = Form(...)):
+    """Step 2: Strict Extraction based on the User's UI Dropdown selection"""
     try:
+        mappings = get_latest_rules()
         insurer_list = json.loads(insurers)
         standardized_data = []
         
         for i, file in enumerate(files):
             final_insurer = insurer_list[i]
-            if final_insurer == "Unknown" or final_insurer == "Error Reading File":
+            if final_insurer == "Unknown" or final_insurer not in mappings:
                 continue 
                 
             contents = await file.read()
             dfs = read_file_to_dfs(file.filename, contents)
-
-            mapping = INSURER_MAPPINGS.get(final_insurer)
-            if not mapping:
-                continue
+            mapping = mappings[final_insurer]
 
             for target_df in dfs:
                 target_df.columns = target_df.columns.astype(str).str.strip()
                 pol_col = get_col_name(target_df.columns, mapping['pol'])
                 
-                # Upgraded Smart Header Finder
+                # Header Scrubber: Looks down 20 rows if top rows are blank/summaries
                 if not pol_col:
                     for idx, row in target_df.head(20).iterrows():
                         row_strs = [str(x).strip() for x in row.values]
                         found_pol = get_col_name(row_strs, mapping['pol'])
-                        found_prem = get_col_name(row_strs, mapping['prem'])
-                        found_comm = get_col_name(row_strs, mapping['comm'])
-                        
-                        # Only reset headers if it finds Pol Num AND Premium/Comm
-                        if found_pol and (found_prem or found_comm):
-                            # Ensure unique column names to prevent Pandas crashes
+                        if found_pol:
+                            # Assign unique column names to prevent Pandas crashes
                             unique_cols = []
                             seen = set()
                             for c in row_strs:
@@ -338,7 +302,7 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                             "policy_date": str(row.get(date_col, '')) if date_col else "",
                             "source_file": file.filename
                         })
-                    break 
+                    break # Data extracted successfully, stop looking at other sheets
                     
         if not standardized_data:
             return {"success": True, "total_records": 0, "data": []}
