@@ -201,11 +201,39 @@
         // --- GLOBAL APP LOGIC ---
         let batchDataGlobal = null;
         let dynamicRosters = { rms: [], agents: [] };
-        
-        // DYNAMIC SYNC: The list of supported insurers is pulled from the backend on load
         let supportedInsurers = ["Unknown"];
 
         const BACKEND_URL = "https://policy-extractor.onrender.com"; 
+
+        // --- WEBSOCKET LIVE STATUS LISTENER ---
+        function connectWebSocket() {
+            // Dynamically convert http/https to ws/wss based on the backend URL
+            const wsUrl = BACKEND_URL.replace(/^http/, 'ws') + "/ws/status";
+            const ws = new WebSocket(wsUrl);
+
+            ws.onmessage = function(event) {
+                // The server sends messages formatted like "MODULE|Actual message text"
+                const parts = event.data.split("|");
+                if (parts.length === 2) {
+                    const module = parts[0];
+                    const msg = parts[1];
+
+                    // Inject the live message into the correct UI caption
+                    if (module === "POLICY") {
+                        document.getElementById('status').innerHTML = `⏳ <strong>${msg}</strong>`;
+                    } else if (module === "COMM_ANALYZE") {
+                        document.getElementById('analyzeStatus').innerHTML = `⏳ <strong>${msg}</strong>`;
+                    } else if (module === "COMM_PROCESS") {
+                        document.getElementById('processCommStatus').innerHTML = `⏳ <strong>${msg}</strong>`;
+                    }
+                }
+            };
+            
+            // Reconnect if the connection drops
+            ws.onclose = function() {
+                setTimeout(connectWebSocket, 2000);
+            };
+        }
 
         window.addEventListener('DOMContentLoaded', async () => {
             const yearDropdown = document.getElementById('businessYear');
@@ -213,7 +241,9 @@
             yearDropdown.innerHTML = '<option value="">-- Choose Year --</option>';
             for (let y = targetYear - 2; y <= targetYear + 1; y++) { yearDropdown.innerHTML += `<option value="${y}">${y}</option>`; }
 
-            // 1. Fetch RMs and Agents
+            // Start the WebSocket Listener
+            connectWebSocket();
+
             try {
                 const response = await fetch(`${BACKEND_URL}/metadata`);
                 if (response.ok) {
@@ -223,7 +253,6 @@
                 }
             } catch (err) { console.error("Roster error: ", err); }
 
-            // 2. Fetch Live Insurer Database for Dropdowns
             try {
                 const insResponse = await fetch(`${BACKEND_URL}/api/insurers`);
                 if (insResponse.ok) {
@@ -250,7 +279,9 @@
             document.getElementById('errorConsole').style.display = "none";
             document.getElementById('errorLogList').innerHTML = "";
             downloadBtn.style.display = "none";
-            status.innerText = "⏳ Processing documents in cloud...";
+            
+            // Initializing connection caption (WebSocket will take over instantly)
+            status.innerText = "⏳ Connecting to secure pipeline...";
 
             try {
                 const response = await fetch(`${BACKEND_URL}/extract-batch`, { method: 'POST', body: formData });
@@ -408,7 +439,7 @@
             selectedCommissionFiles.forEach(f => formData.append("files", f));
 
             btn.disabled = true;
-            status.innerText = "⏳ Scanning files for insurer names...";
+            status.innerText = "⏳ Initiating upload sequence...";
             matrixContainer.style.display = "none";
             document.getElementById('commFinalOutputCard').style.display = "none";
             tbody.innerHTML = "";
@@ -418,10 +449,10 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    status.innerText = "✅ Analysis complete. Please verify the insurers below.";
+                    // Success is now updated via WebSocket or explicitly here
+                    status.innerHTML = "✅ <strong>Analysis complete.</strong> Please verify the insurers below.";
                     
                     result.results.forEach((item, index) => {
-                        // Dropdown perfectly matched with dynamic backend
                         let optionsHTML = supportedInsurers.map(ins => 
                             `<option value="${ins}" ${item.detected_insurer === ins ? 'selected' : ''}>${ins}</option>`
                         ).join('');
@@ -464,7 +495,7 @@
             formData.append("insurers", JSON.stringify(verifiedInsurers));
 
             btn.disabled = true;
-            status.innerText = "⏳ Standardizing multiple sheets and formatting outputs...";
+            status.innerText = "⏳ Connecting to processing engine...";
             finalOutput.style.display = "none";
 
             try {
@@ -473,7 +504,7 @@
                 
                 if (response.ok) {
                     processedCommissionData = result.data; 
-                    status.innerText = `✅ Success! Generated ${result.total_records} standardized records ready for export.`;
+                    status.innerHTML = `✅ <strong>Success!</strong> Generated ${result.total_records} standardized records ready for export.`;
                     finalOutput.style.display = "block";
                 } else {
                     status.innerText = `❌ Error: ${result.detail}`;
