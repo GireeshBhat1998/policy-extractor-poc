@@ -9,3 +9,4 @@ xlrd
 python-multipart
 python-dotenv
 pdfplumber
+websockets
