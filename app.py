@@ -25,55 +25,93 @@ app.add_middleware(
 )
 
 # ==========================================
-# LIVE EXCEL RULE MANAGER
-# Automatically reloads rules if the Excel file is modified
+# HARDCODED SAFETY FALLBACK 
+# ==========================================
+DEFAULT_MAPPINGS = {
+    "Bajaj Allianz": {"pol": ["POLICY_REFERENCE", "Policy No", "Policy Number"], "cust": ["CUSTOMER NAME", "Insured Name"], "prod": ["PRODUCT", "Product Name"], "prem": ["NET PREMIUM", "Premium", "Gross Premium"], "comm": ["TOTAL COMMISSION", "Commission"], "date": ["POLICY DATE", "Policy Date"]},
+    "Care Health": {"pol": ["Policy No", "Policy Number"], "cust": ["Customer Name", "Insured Name"], "prod": ["Type", "Product Name", "Product"], "prem": ["Premium", "Gross Premium"], "comm": ["Total Amount", "Commission", "Total Commission"], "date": ["Effective Date/Policy Start date", "Policy Date", "Effective Date"]},
+    "Go Digit Life": {"pol": ["Policy Number", "Policy No"], "cust": ["Policy Holder Name", "Customer Name"], "prod": ["Product Name", "Product Code"], "prem": ["Net Premium", "Premium"], "comm": ["Total Commission Amount", "Commission"], "date": ["Policy Start Date", "Policy Date"]},
+    "Go Digit General": {"pol": ["Policy Number", "Policy No.", "Policy No"], "cust": ["Customer Name", "Insured Name"], "prod": ["Product Name", "Product"], "prem": ["Gross Premium", "Net Premium", "Premium"], "comm": ["Total Commission", "Commission"], "date": ["Policy Issue Date", "Policy Date"]}
+}
+
+# ==========================================
+# LIVE RULE MANAGER (Supports .xlsx and .csv)
 # ==========================================
 EXCEL_MASTER_FILE = "Insurer_Master_Mapping.xlsx"
+CSV_MASTER_FILE = "Insurer_Master_Mapping.csv"
+
 cached_mappings = {}
 last_modified_time = 0
 
 def get_latest_rules():
     global cached_mappings, last_modified_time
     
-    # Check if file exists
-    if not os.path.exists(EXCEL_MASTER_FILE):
-        print(f"WARNING: {EXCEL_MASTER_FILE} not found!")
-        return cached_mappings
+    file_to_read = None
+    if os.path.exists(EXCEL_MASTER_FILE):
+        file_to_read = EXCEL_MASTER_FILE
+    elif os.path.exists(CSV_MASTER_FILE):
+        file_to_read = CSV_MASTER_FILE
+        
+    if not file_to_read:
+        return DEFAULT_MAPPINGS
 
-    # Check if file was modified since last load
-    current_mtime = os.path.getmtime(EXCEL_MASTER_FILE)
+    current_mtime = os.path.getmtime(file_to_read)
     if current_mtime > last_modified_time:
-        print("Excel Database change detected. Reloading Rules...")
         try:
-            df = pd.read_excel(EXCEL_MASTER_FILE)
+            if file_to_read.endswith('.csv'):
+                df = pd.read_csv(file_to_read)
+            else:
+                df = pd.read_excel(file_to_read)
+            
+            # Indestructible Column Scrubber
+            df.columns = df.columns.astype(str).str.strip().str.lower()
+            
             new_rules = {}
             for _, row in df.iterrows():
-                company = str(row.get('Insurer Company', '')).strip()
+                # Flexibly find the company column
+                company_col = next((c for c in df.columns if 'insurer' in c or 'company' in c), None)
+                if not company_col: continue
+                
+                company = str(row.get(company_col, '')).strip()
                 if pd.isna(company) or company == "nan" or not company:
                     continue
                 
-                # Helper to split comma strings into clean lists
-                def clean_list(val):
+                def clean_list(keyword):
+                    col = next((c for c in df.columns if keyword in c), None)
+                    if not col: return []
+                    val = row.get(col, '')
                     if pd.isna(val) or str(val).strip() == "": return []
-                    return [x.strip().lower() for x in str(val).split(',') if x.strip()]
+                    return [x.strip() for x in str(val).split(',') if x.strip()]
 
                 new_rules[company] = {
-                    "pol": clean_list(row.get('pol_aliases', '')),
-                    "cust": clean_list(row.get('cust_aliases', '')),
-                    "prod": clean_list(row.get('prod_aliases', '')),
-                    "prem": clean_list(row.get('prem_aliases', '')),
-                    "comm": clean_list(row.get('comm_aliases', '')),
-                    "date": clean_list(row.get('date_aliases', ''))
+                    "pol": clean_list('pol'),
+                    "cust": clean_list('cust'),
+                    "prod": clean_list('prod'),
+                    "prem": clean_list('prem'),
+                    "comm": clean_list('comm'),
+                    "date": clean_list('date')
                 }
-            cached_mappings = new_rules
-            last_modified_time = current_mtime
-            print(f"Rules reloaded successfully for {len(cached_mappings)} insurers.")
+            if new_rules:
+                cached_mappings = new_rules
+                last_modified_time = current_mtime
         except Exception as e:
-            print(f"Error loading Excel rules: {e}")
+            print(f"File read error, falling back to defaults: {e}")
+            return DEFAULT_MAPPINGS
             
-    return cached_mappings
+    return cached_mappings if cached_mappings else DEFAULT_MAPPINGS
 
-# --- EXPANDED SCHEMA: Conditional Motor Fields (Phase 1) ---
+# --- DYNAMIC FRONTEND SYNC ROUTE ---
+@app.get("/api/insurers")
+def get_insurers():
+    """Provides the frontend with the live list of insurers from the mapping file."""
+    rules = get_latest_rules()
+    insurers = list(rules.keys())
+    insurers.sort()
+    insurers.append("Unknown")
+    return {"insurers": insurers}
+
+
+# --- EXPANDED SCHEMA ---
 class PolicyExtraction(BaseModel):
     policy_no: str = Field(description="The unique policy or certificate number")
     insurer_company: str = Field(description="Name of the insurance company")
@@ -104,14 +142,13 @@ def get_metadata():
         raise HTTPException(status_code=500, detail=f"Failed loading internal rosters: {str(e)}")
 
 # ==========================================
-# PHASE 1: POLICY DATA PROCESSING ROUTES (INTACT)
+# PHASE 1: POLICY DATA PROCESSING ROUTES
 # ==========================================
 @app.post("/extract-batch")
 async def extract_multiple_policies(files: List[UploadFile] = File(...)):
     combined_results = []
     for file in files:
-        if not file.filename.endswith('.pdf'):
-            continue  
+        if not file.filename.endswith('.pdf'): continue  
         try:
             pdf_bytes = await file.read()
             extracted_text = ""
@@ -120,24 +157,19 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
                     max_pages = min(5, len(pdf.pages))
                     for i in range(max_pages):
                         page_text = pdf.pages[i].extract_text()
-                        if page_text:
-                            extracted_text += page_text + "\n"
-            except Exception:
-                pass
+                        if page_text: extracted_text += page_text + "\n"
+            except Exception: pass
             
             if len(extracted_text.strip()) > 500:
                 extracted_text = re.sub(r'\n{2,}', '\n', extracted_text)
-                extracted_text = re.sub(r'[ \t]{2,}', ' ', extracted_text)
-                extracted_text = extracted_text[:20000]
+                extracted_text = re.sub(r'[ \t]{2,}', ' ', extracted_text)[:20000]
                 prompt_contents = [f"Analyze this raw text extracted from an insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract.\n\nRAW TEXT:\n{extracted_text}"]
             else:
-                prompt_contents = [
-                    types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
-                    "Analyze this scanned insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract."
-                ]
+                prompt_contents = [types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"), "Analyze this scanned insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract."]
 
+            # Updated to standard SDK model name
             response = client.models.generate_content(
-                model="gemini-3.1-flash-lite",
+                model="gemini-2.5-flash",
                 contents=prompt_contents,
                 config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=PolicyExtraction, temperature=0.0),
             )
@@ -145,7 +177,7 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
             extracted_dict["source_file"] = file.filename
             combined_results.append(extracted_dict)
         except Exception as e:
-            combined_results.append({"policy_no": "ERROR", "insurer_company": "Failed to parse file", "customer_name": "Check error log below", "gross_premium": "0", "gst": "0", "product_name": "N/A", "policy_start_date": "N/A", "policy_end_date": "N/A", "is_motor_policy": False, "rto_location": "", "vehicle_make_model": "", "fuel_type": "", "cubic_capacity": "", "mfg_or_reg_date": "", "source_file": file.filename, "parsing_error": str(e)})
+            combined_results.append({"policy_no": "ERROR", "insurer_company": "Failed to parse", "customer_name": str(e), "gross_premium": "0", "gst": "0", "product_name": "N/A", "policy_start_date": "N/A", "policy_end_date": "N/A", "is_motor_policy": False, "rto_location": "", "vehicle_make_model": "", "fuel_type": "", "cubic_capacity": "", "mfg_or_reg_date": "", "source_file": file.filename, "parsing_error": str(e)})
     return {"success": True, "results": combined_results}
 
 @app.post("/export-excel-batch")
@@ -178,18 +210,17 @@ def safe_float(val):
     except ValueError: return 0.0
 
 def get_col_name(columns, aliases):
-    """Strict Matcher based on Excel Master DB"""
-    clean_cols = [str(c).strip().lower().replace('\n', ' ').replace('\r', '') for c in columns]
+    normalized_file_cols = [re.sub(r'[^a-z0-9]', '', str(c).lower()) for c in columns]
     for alias in aliases:
-        if alias in clean_cols:
-            return columns[clean_cols.index(alias)]
+        normalized_alias = re.sub(r'[^a-z0-9]', '', str(alias).lower())
+        if not normalized_alias: continue
+        if normalized_alias in normalized_file_cols:
+            return columns[normalized_file_cols.index(normalized_alias)]
     return None
 
 def read_file_to_dfs(filename, contents):
-    """Reads files strictly as strings to prevent Pandas formatting crashes"""
     dfs = []
     filename_lower = filename.lower()
-    
     if filename_lower.endswith('.csv'):
         try: dfs.append(pd.read_csv(io.BytesIO(contents), dtype=str))
         except Exception:
@@ -218,7 +249,6 @@ def read_file_to_dfs(filename, contents):
 
 @app.post("/analyze-commission-files")
 async def analyze_commission_files(files: List[UploadFile] = File(...)):
-    """Step 1: Uses Filename Routing (No scanning inside files) to populate Verification Matrix"""
     mappings = get_latest_rules()
     results = []
     
@@ -226,19 +256,26 @@ async def analyze_commission_files(files: List[UploadFile] = File(...)):
         fname_lower = file.filename.lower()
         detected = "Unknown"
         
-        # Check if any mapped company name exists in the uploaded file's name
+        # Exact string match
         for insurer in mappings.keys():
             if insurer.lower() in fname_lower:
                 detected = insurer
                 break
                 
+        # Sub-word keyword match
+        if detected == "Unknown":
+            for insurer in mappings.keys():
+                keywords = [w for w in insurer.lower().split() if len(w) > 3 and w not in ['insurance', 'general', 'life', 'health', 'company', 'ltd', 'limited']]
+                if any(kw in fname_lower for kw in keywords):
+                    detected = insurer
+                    break
+
         results.append({"filename": file.filename, "detected_insurer": detected})
         
     return {"success": True, "results": results}
 
 @app.post("/process-commission-batch")
 async def process_commission_batch(files: List[UploadFile] = File(...), insurers: str = Form(...)):
-    """Step 2: Strict Extraction based on the User's UI Dropdown selection"""
     try:
         mappings = get_latest_rules()
         insurer_list = json.loads(insurers)
@@ -246,24 +283,28 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
         
         for i, file in enumerate(files):
             final_insurer = insurer_list[i]
-            if final_insurer == "Unknown" or final_insurer not in mappings:
+            
+            mapping = None
+            for key in mappings.keys():
+                if key.strip().lower() == final_insurer.strip().lower():
+                    mapping = mappings[key]
+                    break
+                    
+            if not mapping:
                 continue 
                 
             contents = await file.read()
             dfs = read_file_to_dfs(file.filename, contents)
-            mapping = mappings[final_insurer]
 
             for target_df in dfs:
                 target_df.columns = target_df.columns.astype(str).str.strip()
                 pol_col = get_col_name(target_df.columns, mapping['pol'])
                 
-                # Header Scrubber: Looks down 20 rows if top rows are blank/summaries
                 if not pol_col:
                     for idx, row in target_df.head(20).iterrows():
                         row_strs = [str(x).strip() for x in row.values]
                         found_pol = get_col_name(row_strs, mapping['pol'])
                         if found_pol:
-                            # Assign unique column names to prevent Pandas crashes
                             unique_cols = []
                             seen = set()
                             for c in row_strs:
@@ -289,7 +330,7 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                     
                     for _, row in target_df.iterrows():
                         pol_val = str(row.get(pol_col, '')).strip()
-                        if pd.isna(row.get(pol_col)) or pol_val == "" or pol_val.lower() == "nan" or "total" in pol_val.lower():
+                        if pd.isna(row.get(pol_col)) or pol_val == "" or pol_val.lower() == "nan" or "total" in pol_val.lower() or "grand" in pol_val.lower():
                             continue
                             
                         standardized_data.append({
@@ -302,7 +343,7 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                             "policy_date": str(row.get(date_col, '')) if date_col else "",
                             "source_file": file.filename
                         })
-                    break # Data extracted successfully, stop looking at other sheets
+                    break 
                     
         if not standardized_data:
             return {"success": True, "total_records": 0, "data": []}
