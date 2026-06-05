@@ -6,7 +6,7 @@ import json
 import re  
 import zipfile
 from typing import List, Optional
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -25,6 +25,40 @@ app.add_middleware(
 )
 
 # ==========================================
+# WEBSOCKET LOGGING MANAGER
+# Streams live server actions to the UI
+# ==========================================
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            try:
+                await connection.send_text(message)
+            except Exception:
+                pass
+
+manager = ConnectionManager()
+
+@app.websocket("/ws/status")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+# ==========================================
 # HARDCODED SAFETY FALLBACK 
 # ==========================================
 DEFAULT_MAPPINGS = {
@@ -35,47 +69,32 @@ DEFAULT_MAPPINGS = {
 }
 
 # ==========================================
-# LIVE RULE MANAGER (Supports .xlsx and .csv)
+# LIVE RULE MANAGER
 # ==========================================
 EXCEL_MASTER_FILE = "Insurer_Master_Mapping.xlsx"
 CSV_MASTER_FILE = "Insurer_Master_Mapping.csv"
-
 cached_mappings = {}
 last_modified_time = 0
 
 def get_latest_rules():
     global cached_mappings, last_modified_time
-    
     file_to_read = None
-    if os.path.exists(EXCEL_MASTER_FILE):
-        file_to_read = EXCEL_MASTER_FILE
-    elif os.path.exists(CSV_MASTER_FILE):
-        file_to_read = CSV_MASTER_FILE
-        
-    if not file_to_read:
-        return DEFAULT_MAPPINGS
+    if os.path.exists(EXCEL_MASTER_FILE): file_to_read = EXCEL_MASTER_FILE
+    elif os.path.exists(CSV_MASTER_FILE): file_to_read = CSV_MASTER_FILE
+    if not file_to_read: return DEFAULT_MAPPINGS
 
     current_mtime = os.path.getmtime(file_to_read)
     if current_mtime > last_modified_time:
         try:
-            if file_to_read.endswith('.csv'):
-                df = pd.read_csv(file_to_read)
-            else:
-                df = pd.read_excel(file_to_read)
-            
-            # Indestructible Column Scrubber
+            if file_to_read.endswith('.csv'): df = pd.read_csv(file_to_read)
+            else: df = pd.read_excel(file_to_read)
             df.columns = df.columns.astype(str).str.strip().str.lower()
-            
             new_rules = {}
             for _, row in df.iterrows():
-                # Flexibly find the company column
                 company_col = next((c for c in df.columns if 'insurer' in c or 'company' in c), None)
                 if not company_col: continue
-                
                 company = str(row.get(company_col, '')).strip()
-                if pd.isna(company) or company == "nan" or not company:
-                    continue
-                
+                if pd.isna(company) or company == "nan" or not company: continue
                 def clean_list(keyword):
                     col = next((c for c in df.columns if keyword in c), None)
                     if not col: return []
@@ -84,12 +103,8 @@ def get_latest_rules():
                     return [x.strip() for x in str(val).split(',') if x.strip()]
 
                 new_rules[company] = {
-                    "pol": clean_list('pol'),
-                    "cust": clean_list('cust'),
-                    "prod": clean_list('prod'),
-                    "prem": clean_list('prem'),
-                    "comm": clean_list('comm'),
-                    "date": clean_list('date')
+                    "pol": clean_list('pol'), "cust": clean_list('cust'), "prod": clean_list('prod'),
+                    "prem": clean_list('prem'), "comm": clean_list('comm'), "date": clean_list('date')
                 }
             if new_rules:
                 cached_mappings = new_rules
@@ -97,21 +112,16 @@ def get_latest_rules():
         except Exception as e:
             print(f"File read error, falling back to defaults: {e}")
             return DEFAULT_MAPPINGS
-            
     return cached_mappings if cached_mappings else DEFAULT_MAPPINGS
 
-# --- DYNAMIC FRONTEND SYNC ROUTE ---
 @app.get("/api/insurers")
 def get_insurers():
-    """Provides the frontend with the live list of insurers from the mapping file."""
     rules = get_latest_rules()
     insurers = list(rules.keys())
     insurers.sort()
     insurers.append("Unknown")
     return {"insurers": insurers}
 
-
-# --- EXPANDED SCHEMA ---
 class PolicyExtraction(BaseModel):
     policy_no: str = Field(description="The unique policy or certificate number")
     insurer_company: str = Field(description="Name of the insurance company")
@@ -133,10 +143,8 @@ client = genai.Client()
 @app.get("/metadata")
 def get_metadata():
     try:
-        with open("rm_list.json", "r") as f:
-            rms = json.load(f)
-        with open("agent_list.json", "r") as f:
-            agents = json.load(f)
+        with open("rm_list.json", "r") as f: rms = json.load(f)
+        with open("agent_list.json", "r") as f: agents = json.load(f)
         return {"rms": rms, "agents": agents}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed loading internal rosters: {str(e)}")
@@ -147,35 +155,33 @@ def get_metadata():
 @app.post("/extract-batch")
 async def extract_multiple_policies(files: List[UploadFile] = File(...)):
     combined_results = []
-    for file in files:
-        # FIX 1: Make filename check case-insensitive (.PDF vs .pdf)
-        if not file.filename.lower().endswith('.pdf'): 
-            continue  
-            
+    total = len(files)
+    await manager.broadcast(f"POLICY|Received batch of {total} documents.")
+    
+    for idx, file in enumerate(files):
+        if not file.filename.lower().endswith('.pdf'): continue  
         try:
+            await manager.broadcast(f"POLICY|[{idx+1}/{total}] Reading {file.filename} locally...")
             pdf_bytes = await file.read()
             extracted_text = ""
             try:
                 with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-                    max_pages = min(5, len(pdf.pages))
+                    max_pages = min(2, len(pdf.pages))
                     for i in range(max_pages):
                         page_text = pdf.pages[i].extract_text()
                         if page_text: extracted_text += page_text + "\n"
             except Exception: pass
             
             if len(extracted_text.strip()) > 500:
+                await manager.broadcast(f"POLICY|[{idx+1}/{total}] Local text extracted. Analyzing via AI...")
                 extracted_text = re.sub(r'\n{2,}', '\n', extracted_text)
                 extracted_text = re.sub(r'[ \t]{2,}', ' ', extracted_text)[:20000]
-# --- ADD THIS LOG ---
-                print(f"⚡ LOCAL SUCCESS: Extracted {len(extracted_text)} chars from {file.filename}")
                 prompt_contents = [f"Analyze this raw text extracted from an insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract.\n\nRAW TEXT:\n{extracted_text}"]
             else:
-                # --- ADD THIS LOG ---
-                print(f"⚠️ LOCAL FAILED (Scanned/Locked PDF): Bypassing to Gemini Vision for {file.filename}")
+                await manager.broadcast(f"POLICY|[{idx+1}/{total}] Locked PDF detected. Processing via AI Vision...")
                 prompt_contents = [types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"), "Analyze this scanned insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract."]
-# --- ADD THIS LOG ---
-            print(f"⏳ Sending {file.filename} payload to Gemini API...")
-            # Ensure we use the latest supported Gemini SDK model
+
+            # Using Gemini 3.5 Flash for high-frequency processing speed
             response = client.models.generate_content(
                 model="gemini-3.5-flash",
                 contents=prompt_contents,
@@ -184,8 +190,12 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
             extracted_dict = json.loads(response.text)
             extracted_dict["source_file"] = file.filename
             combined_results.append(extracted_dict)
+            await manager.broadcast(f"POLICY|[{idx+1}/{total}] Successfully processed {file.filename}.")
         except Exception as e:
+            await manager.broadcast(f"POLICY|❌ Error processing {file.filename}.")
             combined_results.append({"policy_no": "ERROR", "insurer_company": "Failed to parse", "customer_name": str(e), "gross_premium": "0", "gst": "0", "product_name": "N/A", "policy_start_date": "N/A", "policy_end_date": "N/A", "is_motor_policy": False, "rto_location": "", "vehicle_make_model": "", "fuel_type": "", "cubic_capacity": "", "mfg_or_reg_date": "", "source_file": file.filename, "parsing_error": str(e)})
+            
+    await manager.broadcast("POLICY|✅ Batch extraction complete!")
     return {"success": True, "results": combined_results}
 
 @app.post("/export-excel-batch")
@@ -206,9 +216,8 @@ async def export_batch_to_excel(data: List[dict]):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
-# PHASE 2: STRICT DETERMINISTIC COMMISSION PROCESSING
+# PHASE 2: COMMISSION PROCESSING
 # ==========================================
-
 def safe_float(val):
     if pd.isna(val) or val is None or str(val).strip() == "": return 0.0
     val_str = str(val).strip()
@@ -230,7 +239,6 @@ def read_file_to_dfs(filename, contents):
     dfs = []
     filename_lower = filename.lower()
     
-    # FIX 2: Universal Fallback Reader for disguised Excel files
     def safe_read_csv(content_bytes):
         try: return pd.read_csv(io.BytesIO(content_bytes), dtype=str)
         except Exception:
@@ -258,48 +266,47 @@ def read_file_to_dfs(filename, contents):
             for sheet in xls.sheet_names:
                 dfs.append(pd.read_excel(xls, sheet_name=sheet, dtype=str))
         except Exception:
-            # If Excel engines crash on .xlsb (because it's actually a CSV), forcefully read as CSV
             res = safe_read_csv(contents)
             if res is not None: dfs.append(res)
-            
     return dfs
 
 @app.post("/analyze-commission-files")
 async def analyze_commission_files(files: List[UploadFile] = File(...)):
+    await manager.broadcast("COMM_ANALYZE|Loading Master Mapping Database...")
     mappings = get_latest_rules()
     results = []
     
     for file in files:
+        await manager.broadcast(f"COMM_ANALYZE|Scanning filename: {file.filename}...")
         fname_lower = file.filename.lower()
         detected = "Unknown"
-        
-        # Exact string match
         for insurer in mappings.keys():
             if insurer.lower() in fname_lower:
                 detected = insurer
                 break
-                
-        # Sub-word keyword match
         if detected == "Unknown":
             for insurer in mappings.keys():
                 keywords = [w for w in insurer.lower().split() if len(w) > 3 and w not in ['insurance', 'general', 'life', 'health', 'company', 'ltd', 'limited']]
                 if any(kw in fname_lower for kw in keywords):
                     detected = insurer
                     break
-
         results.append({"filename": file.filename, "detected_insurer": detected})
         
+    await manager.broadcast("COMM_ANALYZE|✅ Analysis complete.")
     return {"success": True, "results": results}
 
 @app.post("/process-commission-batch")
 async def process_commission_batch(files: List[UploadFile] = File(...), insurers: str = Form(...)):
     try:
+        await manager.broadcast("COMM_PROCESS|Initializing data extraction engine...")
         mappings = get_latest_rules()
         insurer_list = json.loads(insurers)
         standardized_data = []
+        total = len(files)
         
         for i, file in enumerate(files):
             final_insurer = insurer_list[i]
+            await manager.broadcast(f"COMM_PROCESS|[{i+1}/{total}] Processing {file.filename} as {final_insurer}...")
             
             mapping = None
             for key in mappings.keys():
@@ -308,6 +315,7 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                     break
                     
             if not mapping:
+                await manager.broadcast(f"COMM_PROCESS|⚠️ Skipping {file.filename} (No mapping found).")
                 continue 
                 
             contents = await file.read()
@@ -339,6 +347,7 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                             break
                 
                 if pol_col:
+                    await manager.broadcast(f"COMM_PROCESS|[{i+1}/{total}] Exact column match found. Extracting rows...")
                     cust_col = get_col_name(target_df.columns, mapping['cust'])
                     prod_col = get_col_name(target_df.columns, mapping['prod'])
                     prem_col = get_col_name(target_df.columns, mapping['prem'])
@@ -362,6 +371,7 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                         })
                     break 
                     
+        await manager.broadcast("COMM_PROCESS|✅ Data normalization complete! Building Excel array...")            
         if not standardized_data:
             return {"success": True, "total_records": 0, "data": []}
             
