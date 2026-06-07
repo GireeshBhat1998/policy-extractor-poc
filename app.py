@@ -24,28 +24,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ==========================================
-# WEBSOCKET LOGGING MANAGER
-# Streams live server actions to the UI
-# ==========================================
+# --- WebSocket Manager ---
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
-
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-
     def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-
+        if websocket in self.active_connections: self.active_connections.remove(websocket)
     async def broadcast(self, message: str):
         for connection in self.active_connections:
-            try:
-                await connection.send_text(message)
-            except Exception:
-                pass
+            try: await connection.send_text(message)
+            except Exception: pass
 
 manager = ConnectionManager()
 
@@ -53,13 +44,31 @@ manager = ConnectionManager()
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
-        while True:
-            await websocket.receive_text()
+        while True: await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
+# --- Schema with "NA" Defaults ---
+class PolicyExtraction(BaseModel):
+    policy_no: str = Field(default="NA")
+    insurer_company: str = Field(default="NA")
+    customer_name: str = Field(default="NA")
+    gross_premium: str = Field(default="NA")
+    gst: str = Field(default="NA")
+    product_name: str = Field(default="NA")
+    policy_start_date: str = Field(default="NA")
+    policy_end_date: str = Field(default="NA")
+    is_motor_policy: bool = Field(default=False)
+    rto_location: str = Field(default="NA")
+    vehicle_make_model: str = Field(default="NA")
+    fuel_type: str = Field(default="NA")
+    cubic_capacity: str = Field(default="NA")
+    mfg_or_reg_date: str = Field(default="NA")
+
+client = genai.Client()
+
 # ==========================================
-# HARDCODED SAFETY FALLBACK 
+# HARDCODED SAFETY FALLBACK & RULE MANAGER
 # ==========================================
 DEFAULT_MAPPINGS = {
     "Bajaj Allianz": {"pol": ["POLICY_REFERENCE", "Policy No", "Policy Number"], "cust": ["CUSTOMER NAME", "Insured Name"], "prod": ["PRODUCT", "Product Name"], "prem": ["NET PREMIUM", "Premium", "Gross Premium"], "comm": ["TOTAL COMMISSION", "Commission"], "date": ["POLICY DATE", "Policy Date"]},
@@ -68,9 +77,6 @@ DEFAULT_MAPPINGS = {
     "Go Digit General": {"pol": ["Policy Number", "Policy No.", "Policy No"], "cust": ["Customer Name", "Insured Name"], "prod": ["Product Name", "Product"], "prem": ["Gross Premium", "Net Premium", "Premium"], "comm": ["Total Commission", "Commission"], "date": ["Policy Issue Date", "Policy Date"]}
 }
 
-# ==========================================
-# LIVE RULE MANAGER
-# ==========================================
 EXCEL_MASTER_FILE = "Insurer_Master_Mapping.xlsx"
 CSV_MASTER_FILE = "Insurer_Master_Mapping.csv"
 cached_mappings = {}
@@ -122,24 +128,6 @@ def get_insurers():
     insurers.append("Unknown")
     return {"insurers": insurers}
 
-class PolicyExtraction(BaseModel):
-    policy_no: str = Field(description="The unique policy or certificate number")
-    insurer_company: str = Field(description="Name of the insurance company")
-    customer_name: str = Field(description="Full name of the policyholder or primary insured")
-    gross_premium: str = Field(description="The base/gross premium value before tax")
-    gst: str = Field(description="The total GST or tax amount applied")
-    product_name: str = Field(description="The specific name of the insurance plan or product")
-    policy_start_date: str = Field(description="The risk commencement or start date of the policy")
-    policy_end_date: str = Field(description="The expiry or end date of the policy")
-    is_motor_policy: bool = Field(description="True if this is a motor, car, or vehicle insurance policy, False otherwise")
-    rto_location: str = Field(description="RTO Location (Motor only), leave blank if not applicable", default="")
-    vehicle_make_model: str = Field(description="Vehicle Make and Model (Motor only), leave blank if not applicable", default="")
-    fuel_type: str = Field(description="Fuel Type (Motor only), leave blank if not applicable", default="")
-    cubic_capacity: str = Field(description="Cubic Capacity or CC (Motor only), leave blank if not applicable", default="")
-    mfg_or_reg_date: str = Field(description="Manufacturing or Registration Month and Year (Motor only), leave blank if not applicable", default="")
-
-client = genai.Client()
-
 @app.get("/metadata")
 def get_metadata():
     try:
@@ -156,12 +144,12 @@ def get_metadata():
 async def extract_multiple_policies(files: List[UploadFile] = File(...)):
     combined_results = []
     total = len(files)
-    await manager.broadcast(f"POLICY|Received batch of {total} documents.")
+    await manager.broadcast(f"POLICY|Received {total} documents.")
     
     for idx, file in enumerate(files):
         if not file.filename.lower().endswith('.pdf'): continue  
         try:
-            await manager.broadcast(f"POLICY|[{idx+1}/{total}] Reading {file.filename} locally...")
+            await manager.broadcast(f"POLICY|[{idx+1}/{total}] Processing {file.filename}...")
             pdf_bytes = await file.read()
             extracted_text = ""
             try:
@@ -181,21 +169,19 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
                 await manager.broadcast(f"POLICY|[{idx+1}/{total}] Locked PDF detected. Processing via AI Vision...")
                 prompt_contents = [types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"), "Analyze this scanned insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract."]
 
-            # Using Gemini 3.5 Flash for high-frequency processing speed
             response = client.models.generate_content(
-                model="gemini-3.1-flash-lite",
+                model="gemini-3.5-flash",
                 contents=prompt_contents,
                 config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=PolicyExtraction, temperature=0.0),
             )
-            extracted_dict = json.loads(response.text)
-            extracted_dict["source_file"] = file.filename
-            combined_results.append(extracted_dict)
-            await manager.broadcast(f"POLICY|[{idx+1}/{total}] Successfully processed {file.filename}.")
+            data = json.loads(response.text)
+            data["source_file"] = file.filename
+            combined_results.append(data)
+            await manager.broadcast(f"POLICY|✅ {file.filename} done.")
         except Exception as e:
-            await manager.broadcast(f"POLICY|❌ Error processing {file.filename}.")
-            combined_results.append({"policy_no": "ERROR", "insurer_company": "Failed to parse", "customer_name": str(e), "gross_premium": "0", "gst": "0", "product_name": "N/A", "policy_start_date": "N/A", "policy_end_date": "N/A", "is_motor_policy": False, "rto_location": "", "vehicle_make_model": "", "fuel_type": "", "cubic_capacity": "", "mfg_or_reg_date": "", "source_file": file.filename, "parsing_error": str(e)})
+            combined_results.append({"policy_no": "ERROR", "source_file": file.filename, "parsing_error": str(e)})
+            await manager.broadcast(f"POLICY|❌ {file.filename} failed.")
             
-    await manager.broadcast("POLICY|✅ Batch extraction complete!")
     return {"success": True, "results": combined_results}
 
 @app.post("/export-excel-batch")
@@ -216,7 +202,7 @@ async def export_batch_to_excel(data: List[dict]):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
-# PHASE 2: COMMISSION PROCESSING
+# PHASE 2: COMMISSION PROCESSING ROUTES
 # ==========================================
 def safe_float(val):
     if pd.isna(val) or val is None or str(val).strip() == "": return 0.0
@@ -397,6 +383,119 @@ async def export_commission_to_excel(data: List[dict]):
             df.to_excel(writer, index=False, sheet_name='Standardized Commissions')
         output.seek(0)
         headers = {'Content-Disposition': 'attachment; filename="standardized_commissions_report.xlsx"'}
+        return StreamingResponse(output, headers=headers, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# PHASE 3: RECONCILIATION ENGINE
+# ==========================================
+@app.post("/run-reconciliation")
+async def run_reconciliation(
+    operations_file: UploadFile = File(...),
+    commission_file: UploadFile = File(...)
+):
+    try:
+        await manager.broadcast("RECON|Loading expected and actual data into memory...")
+        ops_bytes = await operations_file.read()
+        comm_bytes = await commission_file.read()
+
+        ops_df = pd.read_excel(io.BytesIO(ops_bytes))
+        comm_df = pd.read_excel(io.BytesIO(comm_bytes))
+
+        await manager.broadcast("RECON|Generating secure Match Keys...")
+        # Utilize the existing Ultimate Normalizer to find Policy Number columns regardless of spelling
+        ops_pol_col = get_col_name(ops_df.columns, ['policynumber', 'policyno', 'policy'])
+        comm_pol_col = get_col_name(comm_df.columns, ['policynumber', 'policyno', 'policy', 'matchkey'])
+
+        if not ops_pol_col or not comm_pol_col:
+            raise Exception("Could not locate a Policy Number column in one or both files.")
+
+        ops_df['match_key'] = ops_df[ops_pol_col].astype(str).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
+        comm_df['match_key'] = comm_df[comm_pol_col].astype(str).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
+
+        ops_df = ops_df.drop_duplicates(subset=['match_key'])
+        comm_df = comm_df.drop_duplicates(subset=['match_key'])
+
+        await manager.broadcast("RECON|Executing Three-Way Merge Algorithm...")
+        # Perform the outer join
+        merged = pd.merge(ops_df, comm_df, on='match_key', how='outer', suffixes=('_ops', '_comm'), indicator=True)
+
+        # Utilize Normalizer to find financial columns
+        ops_comm_col = get_col_name(ops_df.columns, ['calculatedbrokerage', 'expectedcommission', 'brokerage'])
+        comm_recv_col = get_col_name(comm_df.columns, ['commissionreceived', 'actualcommission', 'commission'])
+
+        await manager.broadcast("RECON|Calculating financial variances...")
+        if ops_comm_col:
+            merged['Expected_Commission'] = pd.to_numeric(merged[ops_comm_col], errors='coerce').fillna(0)
+        else:
+            merged['Expected_Commission'] = 0
+
+        if comm_recv_col:
+            merged['Actual_Commission'] = pd.to_numeric(merged[comm_recv_col], errors='coerce').fillna(0)
+        else:
+            merged['Actual_Commission'] = 0
+
+        # Math logic for variances
+        merged['Variance'] = merged['Actual_Commission'] - merged['Expected_Commission']
+        merged['Match_Status'] = merged['_merge'].map({'both': 'Matched', 'left_only': 'Pending / Unpaid', 'right_only': 'Unexpected / Orphan'})
+        
+        # Calculate dashboard metrics
+        matched_df = merged[merged['_merge'] == 'both']
+        pending_df = merged[merged['_merge'] == 'left_only']
+        orphan_df = merged[merged['_merge'] == 'right_only']
+
+        summary = {
+            "total_ops": len(ops_df),
+            "total_comm": len(comm_df),
+            "matched_count": len(matched_df),
+            "pending_count": len(pending_df),
+            "orphan_count": len(orphan_df),
+            "total_expected": float(merged['Expected_Commission'].sum()),
+            "total_actual": float(merged['Actual_Commission'].sum()),
+            "net_variance": float(merged['Variance'].sum()),
+        }
+
+        # Clean dataframe for JSON transmission
+        merged = merged.drop(columns=['_merge'])
+        merged_clean = merged.fillna("")
+        for col in merged_clean.columns:
+            if col not in ['Expected_Commission', 'Actual_Commission', 'Variance']:
+                merged_clean[col] = merged_clean[col].astype(str)
+                
+        merged_json = merged_clean.to_dict(orient='records')
+
+        await manager.broadcast("RECON|✅ Reconciliation complete!")
+        return {"success": True, "summary": summary, "data": merged_json}
+
+    except Exception as e:
+        await manager.broadcast(f"RECON|❌ Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/export-reconciliation")
+async def export_reconciliation(data: List[dict]):
+    try:
+        df = pd.DataFrame(data)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            
+            # Subdivide frames for specific Excel Sheets
+            matched = df[df['Match_Status'] == 'Matched']
+            pending = df[df['Match_Status'] == 'Pending / Unpaid']
+            orphan = df[df['Match_Status'] == 'Unexpected / Orphan']
+
+            # Ensure critical columns are pinned to the front of the Excel sheet
+            first_cols = ['Match_Status', 'match_key', 'Expected_Commission', 'Actual_Commission', 'Variance']
+            other_cols = [c for c in df.columns if c not in first_cols]
+            final_cols = first_cols + other_cols
+
+            df[final_cols].to_excel(writer, index=False, sheet_name='All Records')
+            if not matched.empty: matched[final_cols].to_excel(writer, index=False, sheet_name='Matched')
+            if not pending.empty: pending[final_cols].to_excel(writer, index=False, sheet_name='Pending Unpaid')
+            if not orphan.empty: orphan[final_cols].to_excel(writer, index=False, sheet_name='Unexpected Orphan')
+
+        output.seek(0)
+        headers = {'Content-Disposition': 'attachment; filename="Final_Reconciliation_Report.xlsx"'}
         return StreamingResponse(output, headers=headers, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
