@@ -56,7 +56,6 @@
         .calc-field { font-weight: bold; color: #2b2b2b; background-color: #f8f9fa; text-align: right; padding-right: 15px; }
         .filename-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight: 600; display: block; }
         
-        /* Dashboard Styling */
         .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;}
         .dash-card { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 15px; text-align: center; }
         .dash-card h4 { margin-bottom: 10px; color: #6c757d; font-size: 0.9rem; text-transform: uppercase;}
@@ -145,7 +144,7 @@
                     </div>
                     <datalist id="rmOptionsList"></datalist>
                     <datalist id="agentOptionsList"></datalist>
-                    <button id="downloadBtn" class="btn-success" style="display:none; width:100%; margin-top:20px;" onclick="downloadBatchExcel()">Download Operational Excel Sheet</button>
+                    <button id="downloadBtn" class="btn-success" style="display:none; width:100%; margin-top:20px;" onclick="downloadBatchExcel()">Save to Database & Download Excel</button>
                     <div class="error-console-box" id="errorConsole">
                         <h4>❌ Parsing Failures</h4><ul class="error-log-list" id="errorLogList"></ul>
                     </div>
@@ -175,33 +174,48 @@
 
                 <div class="card" id="commFinalOutputCard" style="display:none; border-left: 5px solid #28a745;">
                     <h3>✅ Processing Complete</h3>
-                    <button id="downloadCommBtn" class="btn-success" onclick="downloadCommissionExcel()">Download Unified Commission Sheet</button>
+                    <button id="downloadCommBtn" class="btn-success" onclick="downloadCommissionExcel()">Save to Database & Download Excel</button>
                 </div>
             </div>
 
             <div id="reconciliation-page" class="page-section">
                 <div class="card">
-                    <h3>1. Upload Engine Outputs</h3>
-                    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Upload the finalized Excel files generated from Phase 1 and Phase 2.</p>
+                    <h3>1. Configure Reconciliation Filters</h3>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Query directly against your master databases. Leave fields blank to run a full reconciliation across all data.</p>
                     
-                    <div class="global-meta-box" style="align-items: flex-start;">
-                        <div class="meta-item" style="flex-direction: column; align-items: flex-start; gap:5px;">
-                            <label><strong>Operations Output (Expected)</strong></label>
-                            <input type="file" id="reconOpsInput" accept=".xlsx">
+                    <div class="global-meta-box">
+                        <div class="meta-item">
+                            <label><strong>Month:</strong></label>
+                            <select id="reconMonth">
+                                <option value="">-- All Months --</option>
+                                <option value="January">January</option><option value="February">February</option>
+                                <option value="March">March</option><option value="April">April</option>
+                                <option value="May">May</option><option value="June">June</option>
+                                <option value="July">July</option><option value="August">August</option>
+                                <option value="September">September</option><option value="October">October</option>
+                                <option value="November">November</option><option value="December">December</option>
+                            </select>
                         </div>
-                        <div class="meta-item" style="flex-direction: column; align-items: flex-start; gap:5px;">
-                            <label><strong>Commission Output (Actual)</strong></label>
-                            <input type="file" id="reconCommInput" accept=".xlsx">
+                        <div class="meta-item">
+                            <label><strong>Year:</strong></label>
+                            <select id="reconYear"></select>
+                        </div>
+                        <div class="meta-item">
+                            <label><strong>Insurer Company:</strong></label>
+                            <input type="text" id="reconInsurer" placeholder="e.g. Digit, Care, Tata...">
+                        </div>
+                        <div class="meta-item">
+                            <label><strong>Specific Policy No:</strong></label>
+                            <input type="text" id="reconPolicy" placeholder="Optional...">
                         </div>
                     </div>
                     
-                    <button id="runReconBtn" onclick="runReconciliation()">Execute Three-Way Match</button>
+                    <button id="runReconBtn" onclick="runReconciliation()">Execute Database Recon</button>
                     <div id="reconStatus" class="status-message"></div>
                 </div>
 
                 <div class="card" id="reconDashboardCard" style="display:none; border-left: 5px solid #17a2b8;">
                     <h3>2. Reconciliation Summary Dashboard</h3>
-                    
                     <div class="dashboard-grid">
                         <div class="dash-card"><h4>Expected Policies</h4><div class="value" id="dashTotalOps">0</div></div>
                         <div class="dash-card"><h4>Actual Paid Policies</h4><div class="value" id="dashTotalComm">0</div></div>
@@ -235,18 +249,18 @@
             document.getElementById('topBarTitle').innerText = navElement.querySelector('.nav-text').innerText;
         }
 
-        // --- GLOBAL APP LOGIC ---
+        // --- GLOBAL VARIABLES ---
         let batchDataGlobal = [];
         let fileMap = new Map();
         let dynamicRosters = { rms: [], agents: [] };
         let supportedInsurers = ["Unknown"];
         let selectedCommissionFiles = []; 
         let processedCommissionData = []; 
-        let reconDataGlobal = []; // Stores Phase 3 data
+        let reconDataGlobal = [];
 
         const BACKEND_URL = "https://policy-extractor.onrender.com"; 
 
-        // --- WEBSOCKET LIVE STATUS LISTENER ---
+        // --- WEBSOCKET LISTENER ---
         function connectWebSocket() {
             const wsUrl = BACKEND_URL.replace(/^http/, 'ws') + "/ws/status";
             const ws = new WebSocket(wsUrl);
@@ -254,8 +268,7 @@
             ws.onmessage = function(event) {
                 const parts = event.data.split("|");
                 if (parts.length === 2) {
-                    const module = parts[0];
-                    const msg = parts[1];
+                    const module = parts[0], msg = parts[1];
                     if (module === "POLICY") document.getElementById('status').innerHTML = `⏳ <strong>${msg}</strong>`;
                     else if (module === "COMM_ANALYZE") document.getElementById('analyzeStatus').innerHTML = `⏳ <strong>${msg}</strong>`;
                     else if (module === "COMM_PROCESS") document.getElementById('processCommStatus').innerHTML = `⏳ <strong>${msg}</strong>`;
@@ -267,9 +280,16 @@
 
         window.addEventListener('DOMContentLoaded', async () => {
             const yearDropdown = document.getElementById('businessYear');
+            const reconYearDropdown = document.getElementById('reconYear');
             const targetYear = new Date().getFullYear();
+            
             yearDropdown.innerHTML = '<option value="">-- Choose Year --</option>';
-            for (let y = targetYear - 2; y <= targetYear + 1; y++) { yearDropdown.innerHTML += `<option value="${y}">${y}</option>`; }
+            reconYearDropdown.innerHTML = '<option value="">-- All Years --</option>';
+            
+            for (let y = targetYear - 2; y <= targetYear + 1; y++) { 
+                yearDropdown.innerHTML += `<option value="${y}">${y}</option>`; 
+                reconYearDropdown.innerHTML += `<option value="${y}">${y}</option>`; 
+            }
 
             connectWebSocket();
 
@@ -288,7 +308,7 @@
                     const insData = await insResponse.json();
                     supportedInsurers = insData.insurers;
                 }
-            } catch (err) { console.error("Failed to load dynamic insurers list", err); }
+            } catch (err) { console.error("Failed to load insurers", err); }
         });
 
         // --- PHASE 1: POLICY TOOL JAVASCRIPT ---
@@ -570,23 +590,23 @@
 
         // --- PHASE 3: RECONCILIATION JAVASCRIPT ---
         async function runReconciliation() {
-            const opsFile = document.getElementById('reconOpsInput').files[0];
-            const commFile = document.getElementById('reconCommInput').files[0];
             const btn = document.getElementById('runReconBtn');
             const status = document.getElementById('reconStatus');
             const dashCard = document.getElementById('reconDashboardCard');
 
-            if (!opsFile || !commFile) {
-                alert("Please upload both the Operations Excel and the Commission Excel to run reconciliation.");
-                return;
-            }
+            const month = document.getElementById('reconMonth').value;
+            const year = document.getElementById('reconYear').value;
+            const insurer = document.getElementById('reconInsurer').value;
+            const policy_no = document.getElementById('reconPolicy').value;
 
             const formData = new FormData();
-            formData.append("operations_file", opsFile);
-            formData.append("commission_file", commFile);
+            formData.append("month", month);
+            formData.append("year", year);
+            formData.append("insurer", insurer);
+            formData.append("policy_no", policy_no);
 
             btn.disabled = true;
-            status.innerText = "⏳ Connecting to reconciliation engine...";
+            status.innerText = "⏳ Connecting to database engine...";
             dashCard.style.display = "none";
 
             try {
@@ -612,7 +632,6 @@
                     const varCard = document.getElementById('dashVarCard');
                     varEl.innerText = formatCurrency(sum.net_variance);
                     
-                    // Style variance visually
                     if (sum.net_variance > 0) {
                         varCard.className = "dash-card positive";
                         varEl.innerText = "+" + formatCurrency(sum.net_variance);
@@ -622,7 +641,7 @@
                         varCard.className = "dash-card";
                     }
 
-                    status.innerHTML = `✅ <strong>Success!</strong> Reconciliation generated.`;
+                    status.innerHTML = `✅ <strong>Success!</strong> Match data pulled from master registers.`;
                     dashCard.style.display = "block";
                 } else {
                     status.innerText = `❌ Error: ${result.detail}`;
@@ -648,7 +667,7 @@
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a'); 
                     a.href = url; 
-                    a.download = `Financial_Reconciliation_Report.xlsx`;
+                    a.download = `Filtered_Reconciliation_Report.xlsx`;
                     document.body.appendChild(a); 
                     a.click(); 
                     a.remove();
