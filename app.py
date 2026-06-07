@@ -166,7 +166,7 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
             extracted_text = ""
             try:
                 with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-                    max_pages = min(2, len(pdf.pages))
+                    max_pages = min(5, len(pdf.pages))
                     for i in range(max_pages):
                         page_text = pdf.pages[i].extract_text()
                         if page_text: extracted_text += page_text + "\n"
