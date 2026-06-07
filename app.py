@@ -191,13 +191,17 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
 async def export_batch_to_excel(data: List[dict]):
     try:
         df = pd.DataFrame(data)
-        preferred_order = ["business_month", "business_year", "policy_number", "insurer_company", "customer_name", "product_name", "gross_premium", "gst", "policy_start_date", "policy_end_date", "relationship_manager", "agent_id", "agent_name", "agent_commission_rate", "commissionable_premium", "brokerage_rate_percent", "calculated_brokerage", "is_motor_policy", "rto_location", "vehicle_make_model", "fuel_type", "cubic_capacity", "mfg_or_reg_date", "source_file"]
+        
+        # FIX: Generate Match Key explicitly here so it appears in the output Excel
+        df['policy_number'] = df['policy_number'].astype(str)
+        df['match_key'] = df['policy_number'].str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
+
+        preferred_order = ["business_month", "business_year", "policy_number", "match_key", "insurer_company", "customer_name", "product_name", "gross_premium", "gst", "policy_start_date", "policy_end_date", "relationship_manager", "agent_id", "agent_name", "agent_commission_rate", "commissionable_premium", "brokerage_rate_percent", "calculated_brokerage", "is_motor_policy", "rto_location", "vehicle_make_model", "fuel_type", "cubic_capacity", "mfg_or_reg_date", "source_file"]
         clean_cols = [c for c in preferred_order if c in df.columns] + [c for c in df.columns if c not in preferred_order]
         df = df[clean_cols]
 
         # --- AUTO-SAVE TO SQLITE DATABASE ---
         db_df = df.copy()
-        db_df['match_key'] = db_df['policy_number'].astype(str).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
         db_df['upload_timestamp'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with sqlite3.connect(DB_PATH) as conn:
             db_df.to_sql('policy_register', conn, if_exists='append', index=False)
@@ -367,7 +371,9 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
             return {"success": True, "total_records": 0, "data": []}
             
         clean_df = pd.DataFrame(standardized_data)
-        clean_df['match_key'] = clean_df['policy_number'].astype(str).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
+        
+        # FIX: Robust float removal
+        clean_df['match_key'] = clean_df['policy_number'].astype(str).str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
         final_results = clean_df.to_dict(orient='records')
         return {"success": True, "total_records": len(final_results), "data": final_results}
     except Exception as e:
@@ -377,6 +383,10 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
 async def export_commission_to_excel(data: List[dict]):
     try:
         df = pd.DataFrame(data)
+        
+        # Re-verify match key explicitly
+        df['match_key'] = df['policy_number'].astype(str).str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
+
         preferred_order = ["insurer_company", "policy_number", "match_key", "customer_name", "product_name", "gross_premium", "commission_received", "policy_date", "source_file"]
         clean_cols = [c for c in preferred_order if c in df.columns]
         df = df[clean_cols]
@@ -423,6 +433,10 @@ async def run_reconciliation(
             await manager.broadcast("RECON|Extracting records and removing duplicates...")
             ops_df = pd.read_sql("SELECT * FROM policy_register", conn)
             comm_df = pd.read_sql("SELECT * FROM commission_register", conn)
+
+        # FIX: Force strict string conversion after pulling from database to prevent float mismatch
+        ops_df['match_key'] = ops_df['match_key'].astype(str).str.replace(r'\.0+$', '', regex=True).str.strip().str.upper()
+        comm_df['match_key'] = comm_df['match_key'].astype(str).str.replace(r'\.0+$', '', regex=True).str.strip().str.upper()
 
         # De-duplicate by match key keeping the newest version
         ops_df = ops_df.sort_values('upload_timestamp').drop_duplicates(subset=['match_key'], keep='last')
