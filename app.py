@@ -4,7 +4,6 @@ import os
 import io
 import json
 import re  
-import zipfile
 from typing import List, Optional
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +13,8 @@ from google import genai
 from google.genai import types
 import pandas as pd
 import pdfplumber
+import sqlite3
+import datetime
 
 app = FastAPI()
 
@@ -24,7 +25,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- WebSocket Manager ---
+# --- DATABASE SETUP ---
+DB_PATH = "mis_enterprise.db"
+
+# --- WEBSOCKET MANAGER ---
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
@@ -48,7 +52,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-# --- Schema with "NA" Defaults ---
+# --- AI SCHEMA ---
 class PolicyExtraction(BaseModel):
     policy_no: str = Field(default="NA")
     insurer_company: str = Field(default="NA")
@@ -107,7 +111,6 @@ def get_latest_rules():
                     val = row.get(col, '')
                     if pd.isna(val) or str(val).strip() == "": return []
                     return [x.strip() for x in str(val).split(',') if x.strip()]
-
                 new_rules[company] = {
                     "pol": clean_list('pol'), "cust": clean_list('cust'), "prod": clean_list('prod'),
                     "prem": clean_list('prem'), "comm": clean_list('comm'), "date": clean_list('date')
@@ -191,6 +194,14 @@ async def export_batch_to_excel(data: List[dict]):
         preferred_order = ["business_month", "business_year", "policy_number", "insurer_company", "customer_name", "product_name", "gross_premium", "gst", "policy_start_date", "policy_end_date", "relationship_manager", "agent_id", "agent_name", "agent_commission_rate", "commissionable_premium", "brokerage_rate_percent", "calculated_brokerage", "is_motor_policy", "rto_location", "vehicle_make_model", "fuel_type", "cubic_capacity", "mfg_or_reg_date", "source_file"]
         clean_cols = [c for c in preferred_order if c in df.columns] + [c for c in df.columns if c not in preferred_order]
         df = df[clean_cols]
+
+        # --- AUTO-SAVE TO SQLITE DATABASE ---
+        db_df = df.copy()
+        db_df['match_key'] = db_df['policy_number'].astype(str).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
+        db_df['upload_timestamp'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with sqlite3.connect(DB_PATH) as conn:
+            db_df.to_sql('policy_register', conn, if_exists='append', index=False)
+
         df.columns = [col.replace('_', ' ').title() for col in df.columns]
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -224,7 +235,6 @@ def get_col_name(columns, aliases):
 def read_file_to_dfs(filename, contents):
     dfs = []
     filename_lower = filename.lower()
-    
     def safe_read_csv(content_bytes):
         try: return pd.read_csv(io.BytesIO(content_bytes), dtype=str)
         except Exception:
@@ -261,7 +271,6 @@ async def analyze_commission_files(files: List[UploadFile] = File(...)):
     await manager.broadcast("COMM_ANALYZE|Loading Master Mapping Database...")
     mappings = get_latest_rules()
     results = []
-    
     for file in files:
         await manager.broadcast(f"COMM_ANALYZE|Scanning filename: {file.filename}...")
         fname_lower = file.filename.lower()
@@ -277,7 +286,6 @@ async def analyze_commission_files(files: List[UploadFile] = File(...)):
                     detected = insurer
                     break
         results.append({"filename": file.filename, "detected_insurer": detected})
-        
     await manager.broadcast("COMM_ANALYZE|✅ Analysis complete.")
     return {"success": True, "results": results}
 
@@ -299,7 +307,6 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                 if key.strip().lower() == final_insurer.strip().lower():
                     mapping = mappings[key]
                     break
-                    
             if not mapping:
                 await manager.broadcast(f"COMM_PROCESS|⚠️ Skipping {file.filename} (No mapping found).")
                 continue 
@@ -326,7 +333,6 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                                     count += 1
                                 seen.add(new_c)
                                 unique_cols.append(new_c)
-                                
                             target_df.columns = unique_cols
                             target_df = target_df.iloc[idx+1:].reset_index(drop=True)
                             pol_col = found_pol
@@ -344,7 +350,6 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
                         pol_val = str(row.get(pol_col, '')).strip()
                         if pd.isna(row.get(pol_col)) or pol_val == "" or pol_val.lower() == "nan" or "total" in pol_val.lower() or "grand" in pol_val.lower():
                             continue
-                            
                         standardized_data.append({
                             "insurer_company": final_insurer,
                             "policy_number": pol_val,
@@ -364,7 +369,6 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
         clean_df = pd.DataFrame(standardized_data)
         clean_df['match_key'] = clean_df['policy_number'].astype(str).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
         final_results = clean_df.to_dict(orient='records')
-        
         return {"success": True, "total_records": len(final_results), "data": final_results}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -376,8 +380,14 @@ async def export_commission_to_excel(data: List[dict]):
         preferred_order = ["insurer_company", "policy_number", "match_key", "customer_name", "product_name", "gross_premium", "commission_received", "policy_date", "source_file"]
         clean_cols = [c for c in preferred_order if c in df.columns]
         df = df[clean_cols]
-        df.columns = [col.replace('_', ' ').title() for col in df.columns]
         
+        # --- AUTO-SAVE TO SQLITE DATABASE ---
+        db_df = df.copy()
+        db_df['upload_timestamp'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with sqlite3.connect(DB_PATH) as conn:
+            db_df.to_sql('commission_register', conn, if_exists='append', index=False)
+
+        df.columns = [col.replace('_', ' ').title() for col in df.columns]
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df.to_excel(writer, index=False, sheet_name='Standardized Commissions')
@@ -388,85 +398,92 @@ async def export_commission_to_excel(data: List[dict]):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==========================================
-# PHASE 3: RECONCILIATION ENGINE
+# PHASE 3: DATABASE RECONCILIATION
 # ==========================================
 @app.post("/run-reconciliation")
 async def run_reconciliation(
-    operations_file: UploadFile = File(...),
-    commission_file: UploadFile = File(...)
+    month: str = Form(""),
+    year: str = Form(""),
+    insurer: str = Form(""),
+    policy_no: str = Form("")
 ):
     try:
-        await manager.broadcast("RECON|Loading expected and actual data into memory...")
-        ops_bytes = await operations_file.read()
-        comm_bytes = await commission_file.read()
+        await manager.broadcast("RECON|Connecting to Enterprise Database...")
+        
+        with sqlite3.connect(DB_PATH) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='policy_register'")
+            if not cursor.fetchone():
+                raise Exception("Policy Register is empty. Process Policy data first.")
+            
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='commission_register'")
+            if not cursor.fetchone():
+                raise Exception("Commission Register is empty. Process Commission data first.")
 
-        ops_df = pd.read_excel(io.BytesIO(ops_bytes))
-        comm_df = pd.read_excel(io.BytesIO(comm_bytes))
+            await manager.broadcast("RECON|Extracting records and removing duplicates...")
+            ops_df = pd.read_sql("SELECT * FROM policy_register", conn)
+            comm_df = pd.read_sql("SELECT * FROM commission_register", conn)
 
-        await manager.broadcast("RECON|Generating secure Match Keys...")
-        # Utilize the existing Ultimate Normalizer to find Policy Number columns regardless of spelling
-        ops_pol_col = get_col_name(ops_df.columns, ['policynumber', 'policyno', 'policy'])
-        comm_pol_col = get_col_name(comm_df.columns, ['policynumber', 'policyno', 'policy', 'matchkey'])
+        # De-duplicate by match key keeping the newest version
+        ops_df = ops_df.sort_values('upload_timestamp').drop_duplicates(subset=['match_key'], keep='last')
+        comm_df = comm_df.sort_values('upload_timestamp').drop_duplicates(subset=['match_key'], keep='last')
 
-        if not ops_pol_col or not comm_pol_col:
-            raise Exception("Could not locate a Policy Number column in one or both files.")
+        await manager.broadcast("RECON|Applying User Filters...")
+        # Filters for ops
+        if month: ops_df = ops_df[ops_df['business_month'].str.lower() == month.lower()]
+        if year: ops_df = ops_df[ops_df['business_year'].astype(str) == str(year)]
+        if insurer: ops_df = ops_df[ops_df['insurer_company'].str.contains(insurer, case=False, na=False)]
+        if policy_no: ops_df = ops_df[ops_df['policy_number'].str.contains(policy_no, case=False, na=False)]
 
-        ops_df['match_key'] = ops_df[ops_pol_col].astype(str).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
-        comm_df['match_key'] = comm_df[comm_pol_col].astype(str).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
+        # Filters for commissions
+        if insurer: comm_df = comm_df[comm_df['insurer_company'].str.contains(insurer, case=False, na=False)]
+        if policy_no: comm_df = comm_df[comm_df['policy_number'].str.contains(policy_no, case=False, na=False)]
 
-        ops_df = ops_df.drop_duplicates(subset=['match_key'])
-        comm_df = comm_df.drop_duplicates(subset=['match_key'])
+        if ops_df.empty and comm_df.empty:
+            raise Exception("No records found matching these filters in either database.")
 
         await manager.broadcast("RECON|Executing Three-Way Merge Algorithm...")
-        # Perform the outer join
         merged = pd.merge(ops_df, comm_df, on='match_key', how='outer', suffixes=('_ops', '_comm'), indicator=True)
 
-        # Utilize Normalizer to find financial columns
-        ops_comm_col = get_col_name(ops_df.columns, ['calculatedbrokerage', 'expectedcommission', 'brokerage'])
-        comm_recv_col = get_col_name(comm_df.columns, ['commissionreceived', 'actualcommission', 'commission'])
+        ops_comm_col = get_col_name(ops_df.columns, ['calculated_brokerage', 'calculatedbrokerage'])
+        comm_recv_col = get_col_name(comm_df.columns, ['commission_received', 'commissionreceived'])
 
         await manager.broadcast("RECON|Calculating financial variances...")
-        if ops_comm_col:
-            merged['Expected_Commission'] = pd.to_numeric(merged[ops_comm_col], errors='coerce').fillna(0)
-        else:
-            merged['Expected_Commission'] = 0
+        merged['Expected_Commission'] = pd.to_numeric(merged[ops_comm_col], errors='coerce').fillna(0) if ops_comm_col else 0
+        merged['Actual_Commission'] = pd.to_numeric(merged[comm_recv_col], errors='coerce').fillna(0) if comm_recv_col else 0
 
-        if comm_recv_col:
-            merged['Actual_Commission'] = pd.to_numeric(merged[comm_recv_col], errors='coerce').fillna(0)
-        else:
-            merged['Actual_Commission'] = 0
-
-        # Math logic for variances
         merged['Variance'] = merged['Actual_Commission'] - merged['Expected_Commission']
         merged['Match_Status'] = merged['_merge'].map({'both': 'Matched', 'left_only': 'Pending / Unpaid', 'right_only': 'Unexpected / Orphan'})
         
-        # Calculate dashboard metrics
+        # --- SAVE RECONCILIATION SNAPSHOT ---
+        recon_snapshot = merged.copy()
+        recon_snapshot['recon_timestamp'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        recon_snapshot['filter_month'] = month or 'ALL'
+        recon_snapshot['filter_year'] = year or 'ALL'
+        clean_snapshot = recon_snapshot.drop(columns=['_merge']).astype(str)
+        with sqlite3.connect(DB_PATH) as conn:
+            clean_snapshot.to_sql('reconciliation_register', conn, if_exists='append', index=False)
+
         matched_df = merged[merged['_merge'] == 'both']
         pending_df = merged[merged['_merge'] == 'left_only']
         orphan_df = merged[merged['_merge'] == 'right_only']
 
         summary = {
-            "total_ops": len(ops_df),
-            "total_comm": len(comm_df),
-            "matched_count": len(matched_df),
-            "pending_count": len(pending_df),
-            "orphan_count": len(orphan_df),
+            "total_ops": len(ops_df), "total_comm": len(comm_df),
+            "matched_count": len(matched_df), "pending_count": len(pending_df), "orphan_count": len(orphan_df),
             "total_expected": float(merged['Expected_Commission'].sum()),
             "total_actual": float(merged['Actual_Commission'].sum()),
             "net_variance": float(merged['Variance'].sum()),
         }
 
-        # Clean dataframe for JSON transmission
         merged = merged.drop(columns=['_merge'])
         merged_clean = merged.fillna("")
         for col in merged_clean.columns:
             if col not in ['Expected_Commission', 'Actual_Commission', 'Variance']:
                 merged_clean[col] = merged_clean[col].astype(str)
                 
-        merged_json = merged_clean.to_dict(orient='records')
-
         await manager.broadcast("RECON|✅ Reconciliation complete!")
-        return {"success": True, "summary": summary, "data": merged_json}
+        return {"success": True, "summary": summary, "data": merged_clean.to_dict(orient='records')}
 
     except Exception as e:
         await manager.broadcast(f"RECON|❌ Error: {str(e)}")
@@ -478,13 +495,10 @@ async def export_reconciliation(data: List[dict]):
         df = pd.DataFrame(data)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            
-            # Subdivide frames for specific Excel Sheets
             matched = df[df['Match_Status'] == 'Matched']
             pending = df[df['Match_Status'] == 'Pending / Unpaid']
             orphan = df[df['Match_Status'] == 'Unexpected / Orphan']
 
-            # Ensure critical columns are pinned to the front of the Excel sheet
             first_cols = ['Match_Status', 'match_key', 'Expected_Commission', 'Actual_Commission', 'Variance']
             other_cols = [c for c in df.columns if c not in first_cols]
             final_cols = first_cols + other_cols
@@ -495,7 +509,7 @@ async def export_reconciliation(data: List[dict]):
             if not orphan.empty: orphan[final_cols].to_excel(writer, index=False, sheet_name='Unexpected Orphan')
 
         output.seek(0)
-        headers = {'Content-Disposition': 'attachment; filename="Final_Reconciliation_Report.xlsx"'}
+        headers = {'Content-Disposition': 'attachment; filename="Filtered_Reconciliation_Report.xlsx"'}
         return StreamingResponse(output, headers=headers, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
