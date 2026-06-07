@@ -55,6 +55,15 @@
         tr:nth-child(even) { background-color: #fdfdfd; }
         .calc-field { font-weight: bold; color: #2b2b2b; background-color: #f8f9fa; text-align: right; padding-right: 15px; }
         .filename-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; font-weight: 600; display: block; }
+        
+        /* Dashboard Styling */
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;}
+        .dash-card { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 15px; text-align: center; }
+        .dash-card h4 { margin-bottom: 10px; color: #6c757d; font-size: 0.9rem; text-transform: uppercase;}
+        .dash-card .value { font-size: 1.8rem; font-weight: bold; color: #343a40; }
+        .dash-card.positive .value { color: #28a745; }
+        .dash-card.negative .value { color: #dc3545; }
+        
         .placeholder-card { text-align: center; padding: 50px; color: #6c757d; }
         .placeholder-card i { font-size: 4rem; margin-bottom: 20px; color: #dee2e6; }
     </style>
@@ -136,7 +145,7 @@
                     </div>
                     <datalist id="rmOptionsList"></datalist>
                     <datalist id="agentOptionsList"></datalist>
-                    <button id="downloadBtn" class="btn-success" style="display:none; width:100%; margin-top:20px;" onclick="downloadBatchExcel()">Download Unified Excel Sheet</button>
+                    <button id="downloadBtn" class="btn-success" style="display:none; width:100%; margin-top:20px;" onclick="downloadBatchExcel()">Download Operational Excel Sheet</button>
                     <div class="error-console-box" id="errorConsole">
                         <h4>❌ Parsing Failures</h4><ul class="error-log-list" id="errorLogList"></ul>
                     </div>
@@ -144,12 +153,9 @@
             </div>
 
             <div id="commission-page" class="page-section">
-                
                 <div class="card">
                     <h3>1. Upload Commission Statements (Batch)</h3>
-                    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">
-                        Select all Excel (.xlsx, .xlsb), CSV, or PDF commission files. 
-                    </p>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Select Excel (.xlsx, .xlsb), CSV, or PDF commission files.</p>
                     <input type="file" id="commissionFilesInput" multiple accept=".csv, .pdf, .xlsb, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" style="max-width:400px;">
                     <button id="analyzeCommBtn" onclick="analyzeCommissionFiles()">Analyze Files</button>
                     <div id="analyzeStatus" class="status-message"></div>
@@ -157,17 +163,9 @@
 
                 <div class="card" id="commVerifyMatrix" style="display:none;">
                     <h3>2. Verification Matrix</h3>
-                    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">
-                        Review the auto-detected insurers below. Change from dropdown if needed.
-                    </p>
                     <div class="table-responsive-wrapper" style="margin-bottom: 20px;">
                         <table style="min-width: auto;">
-                            <thead>
-                                <tr>
-                                    <th style="width: 50%;">Source File Name</th>
-                                    <th style="width: 50%;">Identified Insurance Company</th>
-                                </tr>
-                            </thead>
+                            <thead><tr><th style="width: 50%;">Source File Name</th><th style="width: 50%;">Identified Insurance Company</th></tr></thead>
                             <tbody id="commVerifyTableBody"></tbody>
                         </table>
                     </div>
@@ -177,12 +175,51 @@
 
                 <div class="card" id="commFinalOutputCard" style="display:none; border-left: 5px solid #28a745;">
                     <h3>✅ Processing Complete</h3>
-                    <p style="margin-bottom: 15px;">All statements have been standardized, combined, and alphanumeric match keys generated.</p>
                     <button id="downloadCommBtn" class="btn-success" onclick="downloadCommissionExcel()">Download Unified Commission Sheet</button>
                 </div>
             </div>
 
-            <div id="reconciliation-page" class="page-section"><div class="card placeholder-card"><h2>Reconciliation</h2></div></div>
+            <div id="reconciliation-page" class="page-section">
+                <div class="card">
+                    <h3>1. Upload Engine Outputs</h3>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Upload the finalized Excel files generated from Phase 1 and Phase 2.</p>
+                    
+                    <div class="global-meta-box" style="align-items: flex-start;">
+                        <div class="meta-item" style="flex-direction: column; align-items: flex-start; gap:5px;">
+                            <label><strong>Operations Output (Expected)</strong></label>
+                            <input type="file" id="reconOpsInput" accept=".xlsx">
+                        </div>
+                        <div class="meta-item" style="flex-direction: column; align-items: flex-start; gap:5px;">
+                            <label><strong>Commission Output (Actual)</strong></label>
+                            <input type="file" id="reconCommInput" accept=".xlsx">
+                        </div>
+                    </div>
+                    
+                    <button id="runReconBtn" onclick="runReconciliation()">Execute Three-Way Match</button>
+                    <div id="reconStatus" class="status-message"></div>
+                </div>
+
+                <div class="card" id="reconDashboardCard" style="display:none; border-left: 5px solid #17a2b8;">
+                    <h3>2. Reconciliation Summary Dashboard</h3>
+                    
+                    <div class="dashboard-grid">
+                        <div class="dash-card"><h4>Expected Policies</h4><div class="value" id="dashTotalOps">0</div></div>
+                        <div class="dash-card"><h4>Actual Paid Policies</h4><div class="value" id="dashTotalComm">0</div></div>
+                        <div class="dash-card"><h4>Perfect Match</h4><div class="value" id="dashMatched">0</div></div>
+                        <div class="dash-card negative"><h4>Pending / Unpaid</h4><div class="value" id="dashPending">0</div></div>
+                        <div class="dash-card positive"><h4>Unexpected (Orphan)</h4><div class="value" id="dashOrphan">0</div></div>
+                    </div>
+                    
+                    <div class="dashboard-grid" style="margin-top:20px; border-top: 1px solid #eee; padding-top:20px;">
+                        <div class="dash-card"><h4>Total Expected Comm</h4><div class="value" id="dashExpComm">₹0</div></div>
+                        <div class="dash-card"><h4>Total Actual Comm</h4><div class="value" id="dashActComm">₹0</div></div>
+                        <div class="dash-card" id="dashVarCard"><h4>Net Variance</h4><div class="value" id="dashVariance">₹0</div></div>
+                    </div>
+                    
+                    <button id="downloadReconBtn" class="btn-success" style="margin-top: 25px; width:100%;" onclick="downloadReconciliationExcel()">Download Financial Reconciliation Report</button>
+                </div>
+            </div>
+
             <div id="agent-page" class="page-section"><div class="card placeholder-card"><h2>Agent Management</h2></div></div>
             <div id="invoice-page" class="page-section"><div class="card placeholder-card"><h2>Invoicing</h2></div></div>
         </div>
@@ -199,40 +236,33 @@
         }
 
         // --- GLOBAL APP LOGIC ---
-        let batchDataGlobal = null;
+        let batchDataGlobal = [];
+        let fileMap = new Map();
         let dynamicRosters = { rms: [], agents: [] };
         let supportedInsurers = ["Unknown"];
+        let selectedCommissionFiles = []; 
+        let processedCommissionData = []; 
+        let reconDataGlobal = []; // Stores Phase 3 data
 
         const BACKEND_URL = "https://policy-extractor.onrender.com"; 
 
         // --- WEBSOCKET LIVE STATUS LISTENER ---
         function connectWebSocket() {
-            // Dynamically convert http/https to ws/wss based on the backend URL
             const wsUrl = BACKEND_URL.replace(/^http/, 'ws') + "/ws/status";
             const ws = new WebSocket(wsUrl);
 
             ws.onmessage = function(event) {
-                // The server sends messages formatted like "MODULE|Actual message text"
                 const parts = event.data.split("|");
                 if (parts.length === 2) {
                     const module = parts[0];
                     const msg = parts[1];
-
-                    // Inject the live message into the correct UI caption
-                    if (module === "POLICY") {
-                        document.getElementById('status').innerHTML = `⏳ <strong>${msg}</strong>`;
-                    } else if (module === "COMM_ANALYZE") {
-                        document.getElementById('analyzeStatus').innerHTML = `⏳ <strong>${msg}</strong>`;
-                    } else if (module === "COMM_PROCESS") {
-                        document.getElementById('processCommStatus').innerHTML = `⏳ <strong>${msg}</strong>`;
-                    }
+                    if (module === "POLICY") document.getElementById('status').innerHTML = `⏳ <strong>${msg}</strong>`;
+                    else if (module === "COMM_ANALYZE") document.getElementById('analyzeStatus').innerHTML = `⏳ <strong>${msg}</strong>`;
+                    else if (module === "COMM_PROCESS") document.getElementById('processCommStatus').innerHTML = `⏳ <strong>${msg}</strong>`;
+                    else if (module === "RECON") document.getElementById('reconStatus').innerHTML = `⏳ <strong>${msg}</strong>`;
                 }
             };
-            
-            // Reconnect if the connection drops
-            ws.onclose = function() {
-                setTimeout(connectWebSocket, 2000);
-            };
+            ws.onclose = function() { setTimeout(connectWebSocket, 2000); };
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -241,7 +271,6 @@
             yearDropdown.innerHTML = '<option value="">-- Choose Year --</option>';
             for (let y = targetYear - 2; y <= targetYear + 1; y++) { yearDropdown.innerHTML += `<option value="${y}">${y}</option>`; }
 
-            // Start the WebSocket Listener
             connectWebSocket();
 
             try {
@@ -262,7 +291,7 @@
             } catch (err) { console.error("Failed to load dynamic insurers list", err); }
         });
 
-        // --- POLICY TOOL JAVASCRIPT ---
+        // --- PHASE 1: POLICY TOOL JAVASCRIPT ---
         async function processBatch() {
             const fileInput = document.getElementById('batchFileInput');
             const extractBtn = document.getElementById('extractBtn');
@@ -270,6 +299,8 @@
             const downloadBtn = document.getElementById('downloadBtn');
 
             if (fileInput.files.length === 0) { alert("Please select PDFs!"); return; }
+            for(let f of fileInput.files) fileMap.set(f.name, f);
+
             const formData = new FormData();
             for (let i = 0; i < fileInput.files.length; i++) { formData.append("files", fileInput.files[i]); }
 
@@ -279,8 +310,6 @@
             document.getElementById('errorConsole').style.display = "none";
             document.getElementById('errorLogList').innerHTML = "";
             downloadBtn.style.display = "none";
-            
-            // Initializing connection caption (WebSocket will take over instantly)
             status.innerText = "⏳ Connecting to secure pipeline...";
 
             try {
@@ -296,8 +325,7 @@
         }
 
         function cleanIncomingNumber(val) {
-            if (val === 0 || val === "0") return 0;
-            if (!val) return 0;
+            if (val === "NA" || val === 0 || val === "0" || !val) return 0;
             const parsed = parseFloat(String(val).replace(/,/g, '').trim());
             return isNaN(parsed) ? 0 : parsed;
         }
@@ -307,14 +335,26 @@
             const consoleBox = document.getElementById('errorConsole');
             const logList = document.getElementById('errorLogList');
             let errorCount = 0;
+            tbody.innerHTML = "";
             
             batchDataGlobal.forEach((item, index) => {
                 const isError = item.policy_no === "ERROR";
-                const rowClass = isError ? "class='error-row'" : "";
                 const safeFilename = item.source_file || 'Unknown';
+                const row = document.createElement('tr');
+                if (isError) row.className = "error-row";
                 
-                tbody.innerHTML += `
-                    <tr ${rowClass}>
+                if (isError) {
+                    row.innerHTML = `
+                        <td><div class="filename-truncate" title="${safeFilename}">${safeFilename}</div></td>
+                        <td colspan="8" style="text-align:center; color:red;">
+                            <strong>Parsing Failed:</strong> ${item.parsing_error || 'Unknown Error'}
+                            <button onclick="retryFile('${safeFilename}', ${index})" class="btn-success" style="padding: 5px 10px; margin-left: 15px;">Retry File</button>
+                        </td>
+                    `;
+                    errorCount++;
+                    logList.innerHTML += `<li><strong>${safeFilename}</strong>: ${item.parsing_error}</li>`;
+                } else {
+                    row.innerHTML = `
                         <td><div class="filename-truncate" title="${safeFilename}">${safeFilename}</div></td>
                         <td><div style="font-weight:600">${item.policy_no || 'Missing'}</div><div style="font-size:11px; color:#555">${item.insurer_company || ''}</div></td>
                         <td><input type="text" list="rmOptionsList" id="rmInput-${index}" oninput="evaluateGridValidation()"></td>
@@ -324,17 +364,41 @@
                         <td><input type="number" id="premiumInput-${index}" placeholder="0.00" step="0.01" oninput="executeLiveRowMath(${index})"></td>
                         <td><input type="number" id="rateInput-${index}" placeholder="%" min="0" max="100" step="0.01" oninput="executeLiveRowMath(${index})"></td>
                         <td id="brokerageCalcCell-${index}" class="calc-field">0.00</td>
-                    </tr>`;
-                if (isError && item.parsing_error) {
-                    errorCount++;
-                    logList.innerHTML += `<li><strong>${safeFilename}</strong>: ${item.parsing_error}</li>`;
+                    `;
                 }
+                tbody.appendChild(row);
             });
+            
             if (errorCount > 0) { consoleBox.style.display = "block"; }
             document.getElementById('resultTable').style.display = "table";
             document.getElementById('downloadBtn').style.display = "inline-block";
             document.getElementById('gridContainer').style.display = "block";
             evaluateGridValidation();
+        }
+
+        async function retryFile(filename, index) {
+            const file = fileMap.get(filename);
+            if (!file) { alert("File not found in memory"); return; }
+            
+            const formData = new FormData();
+            formData.append("files", file);
+            document.getElementById('status').innerText = `⏳ Retrying ${filename}...`;
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/extract-batch`, { method: 'POST', body: formData });
+                const result = await response.json();
+                if (response.ok) {
+                    batchDataGlobal[index] = result.results[0];
+                    document.getElementById('errorLogList').innerHTML = ""; 
+                    document.getElementById('errorConsole').style.display = "none";
+                    renderOperationalGrid();
+                    document.getElementById('status').innerText = "✅ Retry successful.";
+                } else {
+                    document.getElementById('status').innerText = "❌ Retry Failed.";
+                }
+            } catch (e) {
+                document.getElementById('status').innerText = `❌ Error: ${e.message}`;
+            }
         }
 
         function extractAgentRosterContext(idx) {
@@ -368,6 +432,7 @@
             let checksPassed = !!(monthSelection && yearSelection);
             
             for (let i = 0; i < batchDataGlobal.length; i++) {
+                if(batchDataGlobal[i].policy_no === "ERROR") continue;
                 const rm = document.getElementById(`rmInput-${i}`).value;
                 const idSpan = document.getElementById(`agentIdSpan-${i}`);
                 const extractedCleanId = idSpan ? idSpan.getAttribute('data-clean-id') : null;
@@ -389,17 +454,17 @@
             const month = document.getElementById('businessMonth').value;
             const year = document.getElementById('businessYear').value;
             
-            const structuralPayload = batchDataGlobal.map((item, idx) => {
+            const structuralPayload = batchDataGlobal.filter(item => item.policy_no !== "ERROR").map((item, idx) => {
                 const idSpan = document.getElementById(`agentIdSpan-${idx}`);
                 return {
                     business_month: month, business_year: year,
                     policy_number: item.policy_no, insurer_company: item.insurer_company,
                     customer_name: item.customer_name, product_name: item.product_name,
                     gross_premium: parseFloat(document.getElementById(`grossInput-${idx}`).value) || 0,
-                    gst: cleanIncomingNumber(item.gst), policy_start_date: item.policy_start_date, policy_end_date: item.policy_end_date,
-                    is_motor_policy: item.is_motor_policy || false, rto_location: item.rto_location || "",
-                    vehicle_make_model: item.vehicle_make_model || "", fuel_type: item.fuel_type || "",
-                    cubic_capacity: item.cubic_capacity || "", mfg_or_reg_date: item.mfg_or_reg_date || "",
+                    gst: item.gst, policy_start_date: item.policy_start_date, policy_end_date: item.policy_end_date,
+                    is_motor_policy: item.is_motor_policy || false, rto_location: item.rto_location,
+                    vehicle_make_model: item.vehicle_make_model, fuel_type: item.fuel_type,
+                    cubic_capacity: item.cubic_capacity, mfg_or_reg_date: item.mfg_or_reg_date,
                     relationship_manager: document.getElementById(`rmInput-${idx}`).value,
                     agent_id: idSpan ? (idSpan.getAttribute('data-clean-id') || "") : "",
                     agent_name: idSpan ? (idSpan.getAttribute('data-clean-name') || "") : "",
@@ -421,10 +486,7 @@
             } catch (error) { alert(`Error: ${error.message}`); }
         }
 
-        // --- COMMISSION MODULE JAVASCRIPT ---
-        let selectedCommissionFiles = []; 
-        let processedCommissionData = []; 
-
+        // --- PHASE 2: COMMISSION MODULE JAVASCRIPT ---
         async function analyzeCommissionFiles() {
             const fileInput = document.getElementById('commissionFilesInput');
             const status = document.getElementById('analyzeStatus');
@@ -432,7 +494,7 @@
             const matrixContainer = document.getElementById('commVerifyMatrix');
             const tbody = document.getElementById('commVerifyTableBody');
 
-            if (fileInput.files.length === 0) { alert("Please select Excel/CSV/PDF files first!"); return; }
+            if (fileInput.files.length === 0) { alert("Please select files first!"); return; }
 
             selectedCommissionFiles = Array.from(fileInput.files);
             const formData = new FormData();
@@ -449,44 +511,27 @@
                 const result = await response.json();
                 
                 if (response.ok) {
-                    // Success is now updated via WebSocket or explicitly here
                     status.innerHTML = "✅ <strong>Analysis complete.</strong> Please verify the insurers below.";
-                    
                     result.results.forEach((item, index) => {
-                        let optionsHTML = supportedInsurers.map(ins => 
-                            `<option value="${ins}" ${item.detected_insurer === ins ? 'selected' : ''}>${ins}</option>`
-                        ).join('');
-                        
+                        let optionsHTML = supportedInsurers.map(ins => `<option value="${ins}" ${item.detected_insurer === ins ? 'selected' : ''}>${ins}</option>`).join('');
                         let rowBg = item.detected_insurer === "Unknown" ? "background-color: #fff3cd;" : "";
-
                         tbody.innerHTML += `
                             <tr style="${rowBg}">
                                 <td><strong title="${item.filename}">${item.filename}</strong></td>
-                                <td>
-                                    <select class="comm-insurer-override-select" style="padding: 6px; margin: 0; width: 100%;">
-                                        ${optionsHTML}
-                                    </select>
-                                </td>
+                                <td><select class="comm-insurer-override-select" style="padding: 6px; margin: 0; width: 100%;">${optionsHTML}</select></td>
                             </tr>
                         `;
                     });
-                    
                     matrixContainer.style.display = "block";
-                } else {
-                    status.innerText = `❌ Error: ${result.detail}`;
-                }
-            } catch (error) {
-                status.innerText = `❌ Connection Error: ${error.message}`;
-            } finally {
-                btn.disabled = false;
-            }
+                } else { status.innerText = `❌ Error: ${result.detail}`; }
+            } catch (error) { status.innerText = `❌ Connection Error: ${error.message}`; } 
+            finally { btn.disabled = false; }
         }
 
         async function processCommissionBatch() {
             const status = document.getElementById('processCommStatus');
             const btn = document.getElementById('processCommDataBtn');
             const finalOutput = document.getElementById('commFinalOutputCard');
-            
             const selects = document.querySelectorAll('.comm-insurer-override-select');
             const verifiedInsurers = Array.from(selects).map(select => select.value);
 
@@ -506,6 +551,79 @@
                     processedCommissionData = result.data; 
                     status.innerHTML = `✅ <strong>Success!</strong> Generated ${result.total_records} standardized records ready for export.`;
                     finalOutput.style.display = "block";
+                } else { status.innerText = `❌ Error: ${result.detail}`; }
+            } catch (error) { status.innerText = `❌ Connection Error: ${error.message}`; } 
+            finally { btn.disabled = false; }
+        }
+
+        async function downloadCommissionExcel() {
+            if (!processedCommissionData || processedCommissionData.length === 0) return;
+            try {
+                const response = await fetch(`${BACKEND_URL}/export-commission-excel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(processedCommissionData) });
+                if (response.ok) {
+                    const blob = await response.blob(); const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url; a.download = `Unified_Commission_Statement.xlsx`;
+                    document.body.appendChild(a); a.click(); a.remove();
+                } else { alert("Failed to generate Excel package."); }
+            } catch (error) { alert(`Error downloading Excel: ${error.message}`); }
+        }
+
+        // --- PHASE 3: RECONCILIATION JAVASCRIPT ---
+        async function runReconciliation() {
+            const opsFile = document.getElementById('reconOpsInput').files[0];
+            const commFile = document.getElementById('reconCommInput').files[0];
+            const btn = document.getElementById('runReconBtn');
+            const status = document.getElementById('reconStatus');
+            const dashCard = document.getElementById('reconDashboardCard');
+
+            if (!opsFile || !commFile) {
+                alert("Please upload both the Operations Excel and the Commission Excel to run reconciliation.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("operations_file", opsFile);
+            formData.append("commission_file", commFile);
+
+            btn.disabled = true;
+            status.innerText = "⏳ Connecting to reconciliation engine...";
+            dashCard.style.display = "none";
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/run-reconciliation`, { method: 'POST', body: formData });
+                const result = await response.json();
+
+                if (response.ok) {
+                    reconDataGlobal = result.data;
+                    const sum = result.summary;
+
+                    document.getElementById('dashTotalOps').innerText = sum.total_ops;
+                    document.getElementById('dashTotalComm').innerText = sum.total_comm;
+                    document.getElementById('dashMatched').innerText = sum.matched_count;
+                    document.getElementById('dashPending').innerText = sum.pending_count;
+                    document.getElementById('dashOrphan').innerText = sum.orphan_count;
+                    
+                    const formatCurrency = (num) => "₹" + num.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+                    
+                    document.getElementById('dashExpComm').innerText = formatCurrency(sum.total_expected);
+                    document.getElementById('dashActComm').innerText = formatCurrency(sum.total_actual);
+                    
+                    const varEl = document.getElementById('dashVariance');
+                    const varCard = document.getElementById('dashVarCard');
+                    varEl.innerText = formatCurrency(sum.net_variance);
+                    
+                    // Style variance visually
+                    if (sum.net_variance > 0) {
+                        varCard.className = "dash-card positive";
+                        varEl.innerText = "+" + formatCurrency(sum.net_variance);
+                    } else if (sum.net_variance < 0) {
+                        varCard.className = "dash-card negative";
+                    } else {
+                        varCard.className = "dash-card";
+                    }
+
+                    status.innerHTML = `✅ <strong>Success!</strong> Reconciliation generated.`;
+                    dashCard.style.display = "block";
                 } else {
                     status.innerText = `❌ Error: ${result.detail}`;
                 }
@@ -516,14 +634,13 @@
             }
         }
 
-        async function downloadCommissionExcel() {
-            if (!processedCommissionData || processedCommissionData.length === 0) return;
-            
+        async function downloadReconciliationExcel() {
+            if (!reconDataGlobal || reconDataGlobal.length === 0) return;
             try {
-                const response = await fetch(`${BACKEND_URL}/export-commission-excel`, { 
+                const response = await fetch(`${BACKEND_URL}/export-reconciliation`, { 
                     method: 'POST', 
                     headers: { 'Content-Type': 'application/json' }, 
-                    body: JSON.stringify(processedCommissionData) 
+                    body: JSON.stringify(reconDataGlobal) 
                 });
                 
                 if (response.ok) {
@@ -531,16 +648,12 @@
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a'); 
                     a.href = url; 
-                    a.download = `Unified_Commission_Statement.xlsx`;
+                    a.download = `Financial_Reconciliation_Report.xlsx`;
                     document.body.appendChild(a); 
                     a.click(); 
                     a.remove();
-                } else { 
-                    alert("Failed to generate Excel package."); 
-                }
-            } catch (error) { 
-                alert(`Error downloading Excel: ${error.message}`); 
-            }
+                } else { alert("Failed to generate Reconciliation package."); }
+            } catch (error) { alert(`Error downloading Excel: ${error.message}`); }
         }
     </script>
 </body>
