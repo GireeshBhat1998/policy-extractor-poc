@@ -15,6 +15,7 @@ import pandas as pd
 import pdfplumber
 import sqlite3
 import datetime
+from openpyxl.styles import PatternFill
 
 app = FastAPI()
 
@@ -141,6 +142,53 @@ def get_metadata():
         raise HTTPException(status_code=500, detail=f"Failed loading internal rosters: {str(e)}")
 
 # ==========================================
+# MASTER DASHBOARD DOWNLOAD ROUTES
+# ==========================================
+@app.get("/export-master-policy")
+async def export_master_policy():
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            df = pd.read_sql("SELECT * FROM policy_register", conn)
+        # Drop duplicates, keeping the most recently uploaded
+        df = df.sort_values('upload_timestamp').drop_duplicates(subset=['match_key'], keep='last')
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Master Policy Register')
+        output.seek(0)
+        headers = {'Content-Disposition': 'attachment; filename="Master_Policy_Register.xlsx"'}
+        return StreamingResponse(output, headers=headers, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Database empty or error: " + str(e))
+
+@app.get("/export-master-commission")
+async def export_master_commission():
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            df = pd.read_sql("SELECT * FROM commission_register", conn)
+        
+        # SUMMATION LOGIC FOR DUPLICATES
+        df['gross_premium'] = pd.to_numeric(df['gross_premium'], errors='coerce').fillna(0)
+        df['commission_received'] = pd.to_numeric(df['commission_received'], errors='coerce').fillna(0)
+        
+        # Determine rules: Sum the financials, take 'last' for text columns
+        agg_funcs = {col: 'last' for col in df.columns if col not in ['gross_premium', 'commission_received', 'match_key']}
+        agg_funcs['gross_premium'] = 'sum'
+        agg_funcs['commission_received'] = 'sum'
+        
+        # Group and sum
+        df = df.sort_values('upload_timestamp').groupby('match_key', as_index=False).agg(agg_funcs)
+
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Master Commission Register')
+        output.seek(0)
+        headers = {'Content-Disposition': 'attachment; filename="Master_Commission_Register.xlsx"'}
+        return StreamingResponse(output, headers=headers, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Database empty or error: " + str(e))
+
+# ==========================================
 # PHASE 1: POLICY DATA PROCESSING ROUTES
 # ==========================================
 @app.post("/extract-batch")
@@ -173,7 +221,7 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
                 prompt_contents = [types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"), "Analyze this scanned insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract."]
 
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.5-flash",
                 contents=prompt_contents,
                 config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=PolicyExtraction, temperature=0.0),
             )
@@ -192,7 +240,6 @@ async def export_batch_to_excel(data: List[dict]):
     try:
         df = pd.DataFrame(data)
         
-        # THE FIX: Strip .0 floats -> Strip special chars -> Strip trailing zeroes (0+$)
         df['policy_number'] = df['policy_number'].astype(str)
         df['match_key'] = df['policy_number'].str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper().str.replace(r'0+$', '', regex=True)
 
@@ -372,7 +419,6 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
             
         clean_df = pd.DataFrame(standardized_data)
         
-        # THE FIX: Applied here as well to strip trailing zeroes (0+$)
         clean_df['match_key'] = clean_df['policy_number'].astype(str).str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper().str.replace(r'0+$', '', regex=True)
         final_results = clean_df.to_dict(orient='records')
         return {"success": True, "total_records": len(final_results), "data": final_results}
@@ -383,8 +429,6 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
 async def export_commission_to_excel(data: List[dict]):
     try:
         df = pd.DataFrame(data)
-        
-        # Re-verify match key explicitly
         df['match_key'] = df['policy_number'].astype(str).str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper().str.replace(r'0+$', '', regex=True)
 
         preferred_order = ["insurer_company", "policy_number", "match_key", "customer_name", "product_name", "gross_premium", "commission_received", "policy_date", "source_file"]
@@ -434,34 +478,42 @@ async def run_reconciliation(
             ops_df = pd.read_sql("SELECT * FROM policy_register", conn)
             comm_df = pd.read_sql("SELECT * FROM commission_register", conn)
 
-        # THE FIX: Apply the Zero-Suffix Stripper to the real-time match engine
         def build_indestructible_key(val):
             if pd.isna(val) or val is None: return "UNKNOWN"
             val_str = str(val).strip()
-            # Fix scientific notation if pandas guessed wrong historically
             if 'e+' in val_str.lower():
                 try: val_str = str(int(float(val_str)))
                 except: pass
-            val_str = re.sub(r'\.0+$', '', val_str) # Strip float zeroes
-            val_str = re.sub(r'[^a-zA-Z0-9]', '', val_str).upper() # Strip non-alphanumeric
-            val_str = re.sub(r'0+$', '', val_str) # NEW: Strip Endorsement/Trailing Zeroes
+            val_str = re.sub(r'\.0+$', '', val_str) 
+            val_str = re.sub(r'[^a-zA-Z0-9]', '', val_str).upper() 
+            val_str = re.sub(r'0+$', '', val_str) 
             return val_str
 
         ops_df['match_key'] = ops_df['policy_number'].apply(build_indestructible_key)
         comm_df['match_key'] = comm_df['policy_number'].apply(build_indestructible_key)
 
-        # NOW deduplicate based on the clean keys
+        # ----------------------------------------------------
+        # THE FIX 1 & 2: DEDUPLICATE OPS, BUT AGGREGATE COMMISSIONS
+        # ----------------------------------------------------
+        # Ops: Keep most recent duplicate
         ops_df = ops_df.sort_values('upload_timestamp').drop_duplicates(subset=['match_key'], keep='last')
-        comm_df = comm_df.sort_values('upload_timestamp').drop_duplicates(subset=['match_key'], keep='last')
+        
+        # Comm: SUM duplicates
+        comm_df['gross_premium'] = pd.to_numeric(comm_df['gross_premium'], errors='coerce').fillna(0)
+        comm_df['commission_received'] = pd.to_numeric(comm_df['commission_received'], errors='coerce').fillna(0)
+        
+        agg_funcs_comm = {col: 'last' for col in comm_df.columns if col not in ['gross_premium', 'commission_received', 'match_key']}
+        agg_funcs_comm['gross_premium'] = 'sum'
+        agg_funcs_comm['commission_received'] = 'sum'
+        
+        comm_df = comm_df.sort_values('upload_timestamp').groupby('match_key', as_index=False).agg(agg_funcs_comm)
 
         await manager.broadcast("RECON|Applying User Filters...")
-        # Filters for ops 
         if month: ops_df = ops_df[ops_df['business_month'].str.lower().str.strip() == month.lower().strip()]
         if year: ops_df = ops_df[ops_df['business_year'].astype(str).str.strip() == str(year).strip()]
         if insurer: ops_df = ops_df[ops_df['insurer_company'].str.contains(insurer, case=False, na=False)]
         if policy_no: ops_df = ops_df[ops_df['policy_number'].str.contains(policy_no, case=False, na=False)]
 
-        # Filters for commissions
         if insurer: comm_df = comm_df[comm_df['insurer_company'].str.contains(insurer, case=False, na=False)]
         if policy_no: comm_df = comm_df[comm_df['policy_number'].str.contains(policy_no, case=False, na=False)]
 
@@ -469,7 +521,6 @@ async def run_reconciliation(
             raise Exception("No records found matching these filters in either database.")
 
         await manager.broadcast("RECON|Executing Three-Way Merge Algorithm...")
-        # Merges ONLY on policy number match_key. Dollar amounts do not affect the join.
         merged = pd.merge(ops_df, comm_df, on='match_key', how='outer', suffixes=('_ops', '_comm'), indicator=True)
 
         ops_comm_col = get_col_name(ops_df.columns, ['calculated_brokerage', 'calculatedbrokerage'])
@@ -482,11 +533,10 @@ async def run_reconciliation(
         merged['Variance'] = merged['Actual_Commission'] - merged['Expected_Commission']
         merged['Match_Status'] = merged['_merge'].map({'both': 'Matched', 'left_only': 'Pending / Unpaid', 'right_only': 'Unexpected / Orphan'})
         
-        # --- BUSINESS LOGIC FLAG ---
         def determine_action(row):
             if row['Match_Status'] == 'Pending / Unpaid': return 'Missing Payment'
             if row['Match_Status'] == 'Unexpected / Orphan': return 'Unmapped Policy'
-            if row['Variance'] < -5: return 'Short Received' # 5 rupee margin of error
+            if row['Variance'] < -5: return 'Short Received' 
             return 'Cleared'
 
         merged['Action_Required'] = merged.apply(determine_action, axis=1)
@@ -525,6 +575,10 @@ async def run_reconciliation(
         await manager.broadcast(f"RECON|❌ Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ----------------------------------------------------
+# THE FIX 3: EXCEL COLOR HIGHLIGHTING
+# ----------------------------------------------------
 @app.post("/export-reconciliation")
 async def export_reconciliation(data: List[dict]):
     try:
@@ -543,6 +597,33 @@ async def export_reconciliation(data: List[dict]):
             if not matched.empty: matched[final_cols].to_excel(writer, index=False, sheet_name='Matched')
             if not pending.empty: pending[final_cols].to_excel(writer, index=False, sheet_name='Pending Unpaid')
             if not orphan.empty: orphan[final_cols].to_excel(writer, index=False, sheet_name='Unexpected Orphan')
+
+            workbook = writer.book
+
+            # Define Highlight Colors
+            green_fill = PatternFill(start_color="d4edda", end_color="d4edda", fill_type="solid")
+            yellow_fill = PatternFill(start_color="fff3cd", end_color="fff3cd", fill_type="solid")
+            red_fill = PatternFill(start_color="f8d7da", end_color="f8d7da", fill_type="solid")
+
+            # Color the Tabs based on status
+            if 'Matched' in workbook.sheetnames: workbook['Matched'].sheet_properties.tabColor = "28a745"
+            if 'Pending Unpaid' in workbook.sheetnames: workbook['Pending Unpaid'].sheet_properties.tabColor = "ffc107"
+            if 'Unexpected Orphan' in workbook.sheetnames: workbook['Unexpected Orphan'].sheet_properties.tabColor = "dc3545"
+
+            # Color rows inside the 'All Records' sheet
+            if 'All Records' in workbook.sheetnames:
+                ws = workbook['All Records']
+                status_col_idx = final_cols.index('Match_Status') + 1 
+                for row in range(2, ws.max_row + 1):
+                    val = ws.cell(row=row, column=status_col_idx).value
+                    fill = None
+                    if val == 'Matched': fill = green_fill
+                    elif val == 'Pending / Unpaid': fill = yellow_fill
+                    elif val == 'Unexpected / Orphan': fill = red_fill
+
+                    if fill:
+                        for col in range(1, ws.max_column + 1):
+                            ws.cell(row=row, column=col).fill = fill
 
         output.seek(0)
         headers = {'Content-Disposition': 'attachment; filename="Filtered_Reconciliation_Report.xlsx"'}
