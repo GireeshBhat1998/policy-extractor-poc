@@ -173,7 +173,7 @@ async def extract_multiple_policies(files: List[UploadFile] = File(...)):
                 prompt_contents = [types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"), "Analyze this scanned insurance policy. If it is a motor/vehicle policy, set is_motor_policy to true and extract the vehicle details. If it is Health/Other, set it to false and leave vehicle fields blank. Map exactly to the schema contract."]
 
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-3.5-flash",
                 contents=prompt_contents,
                 config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=PolicyExtraction, temperature=0.0),
             )
@@ -192,9 +192,9 @@ async def export_batch_to_excel(data: List[dict]):
     try:
         df = pd.DataFrame(data)
         
-        # Generate Match Key explicitly here so it appears in the output Excel
+        # THE FIX: Strip .0 floats -> Strip special chars -> Strip trailing zeroes (0+$)
         df['policy_number'] = df['policy_number'].astype(str)
-        df['match_key'] = df['policy_number'].str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
+        df['match_key'] = df['policy_number'].str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper().str.replace(r'0+$', '', regex=True)
 
         preferred_order = ["business_month", "business_year", "policy_number", "match_key", "insurer_company", "customer_name", "product_name", "gross_premium", "gst", "policy_start_date", "policy_end_date", "relationship_manager", "agent_id", "agent_name", "agent_commission_rate", "commissionable_premium", "brokerage_rate_percent", "calculated_brokerage", "is_motor_policy", "rto_location", "vehicle_make_model", "fuel_type", "cubic_capacity", "mfg_or_reg_date", "source_file"]
         clean_cols = [c for c in preferred_order if c in df.columns] + [c for c in df.columns if c not in preferred_order]
@@ -372,7 +372,8 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
             
         clean_df = pd.DataFrame(standardized_data)
         
-        clean_df['match_key'] = clean_df['policy_number'].astype(str).str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
+        # THE FIX: Applied here as well to strip trailing zeroes (0+$)
+        clean_df['match_key'] = clean_df['policy_number'].astype(str).str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper().str.replace(r'0+$', '', regex=True)
         final_results = clean_df.to_dict(orient='records')
         return {"success": True, "total_records": len(final_results), "data": final_results}
     except Exception as e:
@@ -383,7 +384,8 @@ async def export_commission_to_excel(data: List[dict]):
     try:
         df = pd.DataFrame(data)
         
-        df['match_key'] = df['policy_number'].astype(str).str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
+        # Re-verify match key explicitly
+        df['match_key'] = df['policy_number'].astype(str).str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper().str.replace(r'0+$', '', regex=True)
 
         preferred_order = ["insurer_company", "policy_number", "match_key", "customer_name", "product_name", "gross_premium", "commission_received", "policy_date", "source_file"]
         clean_cols = [c for c in preferred_order if c in df.columns]
@@ -432,7 +434,7 @@ async def run_reconciliation(
             ops_df = pd.read_sql("SELECT * FROM policy_register", conn)
             comm_df = pd.read_sql("SELECT * FROM commission_register", conn)
 
-        # THE FIX: Completely rebuild the match_key from scratch to bypass bad historical DB data
+        # THE FIX: Apply the Zero-Suffix Stripper to the real-time match engine
         def build_indestructible_key(val):
             if pd.isna(val) or val is None: return "UNKNOWN"
             val_str = str(val).strip()
@@ -440,11 +442,10 @@ async def run_reconciliation(
             if 'e+' in val_str.lower():
                 try: val_str = str(int(float(val_str)))
                 except: pass
-            # Strip .0 decimals
-            val_str = re.sub(r'\.0+$', '', val_str)
-            # Strip non-alphanumeric
-            val_str = re.sub(r'[^a-zA-Z0-9]', '', val_str)
-            return val_str.upper()
+            val_str = re.sub(r'\.0+$', '', val_str) # Strip float zeroes
+            val_str = re.sub(r'[^a-zA-Z0-9]', '', val_str).upper() # Strip non-alphanumeric
+            val_str = re.sub(r'0+$', '', val_str) # NEW: Strip Endorsement/Trailing Zeroes
+            return val_str
 
         ops_df['match_key'] = ops_df['policy_number'].apply(build_indestructible_key)
         comm_df['match_key'] = comm_df['policy_number'].apply(build_indestructible_key)
@@ -454,7 +455,7 @@ async def run_reconciliation(
         comm_df = comm_df.sort_values('upload_timestamp').drop_duplicates(subset=['match_key'], keep='last')
 
         await manager.broadcast("RECON|Applying User Filters...")
-        # Filters for ops (Use strip() to prevent trailing spaces from ruining matches)
+        # Filters for ops 
         if month: ops_df = ops_df[ops_df['business_month'].str.lower().str.strip() == month.lower().strip()]
         if year: ops_df = ops_df[ops_df['business_year'].astype(str).str.strip() == str(year).strip()]
         if insurer: ops_df = ops_df[ops_df['insurer_company'].str.contains(insurer, case=False, na=False)]
@@ -481,7 +482,7 @@ async def run_reconciliation(
         merged['Variance'] = merged['Actual_Commission'] - merged['Expected_Commission']
         merged['Match_Status'] = merged['_merge'].map({'both': 'Matched', 'left_only': 'Pending / Unpaid', 'right_only': 'Unexpected / Orphan'})
         
-        # --- NEW BUSINESS LOGIC FLAG ---
+        # --- BUSINESS LOGIC FLAG ---
         def determine_action(row):
             if row['Match_Status'] == 'Pending / Unpaid': return 'Missing Payment'
             if row['Match_Status'] == 'Unexpected / Orphan': return 'Unmapped Policy'
