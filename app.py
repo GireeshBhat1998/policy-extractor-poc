@@ -455,7 +455,7 @@ async def run_reconciliation(
 
         await manager.broadcast("RECON|Applying User Filters...")
         # Filters for ops (Use strip() to prevent trailing spaces from ruining matches)
-        if month: ops_df = ops_df[ops_df['business_month'].str.lower().str.strip() == month.lower().str.strip()]
+        if month: ops_df = ops_df[ops_df['business_month'].str.lower().str.strip() == month.lower().strip()]
         if year: ops_df = ops_df[ops_df['business_year'].astype(str).str.strip() == str(year).strip()]
         if insurer: ops_df = ops_df[ops_df['insurer_company'].str.contains(insurer, case=False, na=False)]
         if policy_no: ops_df = ops_df[ops_df['policy_number'].str.contains(policy_no, case=False, na=False)]
