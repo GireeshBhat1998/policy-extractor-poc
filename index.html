@@ -62,6 +62,7 @@
         .dash-card .value { font-size: 1.8rem; font-weight: bold; color: #343a40; }
         .dash-card.positive .value { color: #28a745; }
         .dash-card.negative .value { color: #dc3545; }
+        .dash-hover:hover { filter: brightness(0.95); transition: 0.2s; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
         
         .placeholder-card { text-align: center; padding: 50px; color: #6c757d; }
         .placeholder-card i { font-size: 4rem; margin-bottom: 20px; color: #dee2e6; }
@@ -75,8 +76,8 @@
             <button class="hamburger-btn" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
         </div>
         <ul class="nav-menu">
-            <li class="nav-item" onclick="switchPage('dashboard-page', this)"><i class="fas fa-chart-line nav-icon"></i><span class="nav-text">Dashboard</span></li>
-            <li class="nav-item active" onclick="switchPage('policy-page', this)"><i class="fas fa-file-invoice nav-icon"></i><span class="nav-text">Policy Data</span></li>
+            <li class="nav-item active" onclick="switchPage('dashboard-page', this)"><i class="fas fa-chart-line nav-icon"></i><span class="nav-text">Dashboard</span></li>
+            <li class="nav-item" onclick="switchPage('policy-page', this)"><i class="fas fa-file-invoice nav-icon"></i><span class="nav-text">Policy Data</span></li>
             <li class="nav-item" onclick="switchPage('commission-page', this)"><i class="fas fa-coins nav-icon"></i><span class="nav-text">Commission Data</span></li>
             <li class="nav-item" onclick="switchPage('reconciliation-page', this)"><i class="fas fa-balance-scale nav-icon"></i><span class="nav-text">Reconciliation</span></li>
             <li class="nav-item" onclick="switchPage('agent-page', this)"><i class="fas fa-users nav-icon"></i><span class="nav-text">Agent Management</span></li>
@@ -85,14 +86,31 @@
     </nav>
 
     <main class="main-content">
-        <header class="top-bar"><h1 id="topBarTitle">Policy Data Processing</h1></header>
+        <header class="top-bar"><h1 id="topBarTitle">Business Overview Dashboard</h1></header>
         <div class="page-container">
 
-            <div id="dashboard-page" class="page-section">
-                <div class="card placeholder-card"><i class="fas fa-chart-pie"></i><h2>Business Overview Dashboard</h2></div>
+            <div id="dashboard-page" class="page-section active-page">
+                <div class="card">
+                    <h3>🗄️ Master Database Registers</h3>
+                    <p style="font-size: 13px; color: #666; margin-bottom: 15px;">Download your fully up-to-date master records directly from the persistent SQLite database. Data is auto-deduplicated and summed across all uploaded batches.</p>
+                    
+                    <div class="dashboard-grid">
+                        <div class="dash-card dash-hover" style="cursor: pointer; background: #e2f0d9; border-color: #c3e6cb;" onclick="downloadMaster('policy')">
+                            <i class="fas fa-file-invoice" style="font-size: 2rem; color: #28a745; margin-bottom: 10px;"></i>
+                            <h4 style="color: #155724;">Expected Policy Data (Phase 1)</h4>
+                            <div style="font-size: 12px; color: #555; margin-top: 5px;">Download Complete Register</div>
+                        </div>
+                        
+                        <div class="dash-card dash-hover" style="cursor: pointer; background: #d1ecf1; border-color: #bee5eb;" onclick="downloadMaster('commission')">
+                            <i class="fas fa-coins" style="font-size: 2rem; color: #17a2b8; margin-bottom: 10px;"></i>
+                            <h4 style="color: #0c5460;">Actual Commission Data (Phase 2)</h4>
+                            <div style="font-size: 12px; color: #555; margin-top: 5px;">Download Complete Register</div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div id="policy-page" class="page-section active-page">
+            <div id="policy-page" class="page-section">
                 <div class="card">
                     <h3>1. Select Sales Period</h3>
                     <div class="global-meta-box">
@@ -259,6 +277,11 @@
         let reconDataGlobal = [];
 
         const BACKEND_URL = "https://policy-extractor.onrender.com"; 
+
+        // Dashboard Download Helper
+        function downloadMaster(type) {
+            window.location.href = `${BACKEND_URL}/export-master-${type}`;
+        }
 
         // --- WEBSOCKET LISTENER ---
         function connectWebSocket() {
