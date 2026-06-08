@@ -192,7 +192,7 @@ async def export_batch_to_excel(data: List[dict]):
     try:
         df = pd.DataFrame(data)
         
-        # FIX: Generate Match Key explicitly here so it appears in the output Excel
+        # Generate Match Key explicitly here so it appears in the output Excel
         df['policy_number'] = df['policy_number'].astype(str)
         df['match_key'] = df['policy_number'].str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
 
@@ -372,7 +372,6 @@ async def process_commission_batch(files: List[UploadFile] = File(...), insurers
             
         clean_df = pd.DataFrame(standardized_data)
         
-        # FIX: Robust float removal
         clean_df['match_key'] = clean_df['policy_number'].astype(str).str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
         final_results = clean_df.to_dict(orient='records')
         return {"success": True, "total_records": len(final_results), "data": final_results}
@@ -384,7 +383,6 @@ async def export_commission_to_excel(data: List[dict]):
     try:
         df = pd.DataFrame(data)
         
-        # Re-verify match key explicitly
         df['match_key'] = df['policy_number'].astype(str).str.replace(r'\.0+$', '', regex=True).str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.upper()
 
         preferred_order = ["insurer_company", "policy_number", "match_key", "customer_name", "product_name", "gross_premium", "commission_received", "policy_date", "source_file"]
@@ -430,22 +428,35 @@ async def run_reconciliation(
             if not cursor.fetchone():
                 raise Exception("Commission Register is empty. Process Commission data first.")
 
-            await manager.broadcast("RECON|Extracting records and removing duplicates...")
+            await manager.broadcast("RECON|Extracting records...")
             ops_df = pd.read_sql("SELECT * FROM policy_register", conn)
             comm_df = pd.read_sql("SELECT * FROM commission_register", conn)
 
-        # FIX: Force strict string conversion after pulling from database to prevent float mismatch
-        ops_df['match_key'] = ops_df['match_key'].astype(str).str.replace(r'\.0+$', '', regex=True).str.strip().str.upper()
-        comm_df['match_key'] = comm_df['match_key'].astype(str).str.replace(r'\.0+$', '', regex=True).str.strip().str.upper()
+        # THE FIX: Completely rebuild the match_key from scratch to bypass bad historical DB data
+        def build_indestructible_key(val):
+            if pd.isna(val) or val is None: return "UNKNOWN"
+            val_str = str(val).strip()
+            # Fix scientific notation if pandas guessed wrong historically
+            if 'e+' in val_str.lower():
+                try: val_str = str(int(float(val_str)))
+                except: pass
+            # Strip .0 decimals
+            val_str = re.sub(r'\.0+$', '', val_str)
+            # Strip non-alphanumeric
+            val_str = re.sub(r'[^a-zA-Z0-9]', '', val_str)
+            return val_str.upper()
 
-        # De-duplicate by match key keeping the newest version
+        ops_df['match_key'] = ops_df['policy_number'].apply(build_indestructible_key)
+        comm_df['match_key'] = comm_df['policy_number'].apply(build_indestructible_key)
+
+        # NOW deduplicate based on the clean keys
         ops_df = ops_df.sort_values('upload_timestamp').drop_duplicates(subset=['match_key'], keep='last')
         comm_df = comm_df.sort_values('upload_timestamp').drop_duplicates(subset=['match_key'], keep='last')
 
         await manager.broadcast("RECON|Applying User Filters...")
-        # Filters for ops
-        if month: ops_df = ops_df[ops_df['business_month'].str.lower() == month.lower()]
-        if year: ops_df = ops_df[ops_df['business_year'].astype(str) == str(year)]
+        # Filters for ops (Use strip() to prevent trailing spaces from ruining matches)
+        if month: ops_df = ops_df[ops_df['business_month'].str.lower().str.strip() == month.lower().str.strip()]
+        if year: ops_df = ops_df[ops_df['business_year'].astype(str).str.strip() == str(year).strip()]
         if insurer: ops_df = ops_df[ops_df['insurer_company'].str.contains(insurer, case=False, na=False)]
         if policy_no: ops_df = ops_df[ops_df['policy_number'].str.contains(policy_no, case=False, na=False)]
 
@@ -457,6 +468,7 @@ async def run_reconciliation(
             raise Exception("No records found matching these filters in either database.")
 
         await manager.broadcast("RECON|Executing Three-Way Merge Algorithm...")
+        # Merges ONLY on policy number match_key. Dollar amounts do not affect the join.
         merged = pd.merge(ops_df, comm_df, on='match_key', how='outer', suffixes=('_ops', '_comm'), indicator=True)
 
         ops_comm_col = get_col_name(ops_df.columns, ['calculated_brokerage', 'calculatedbrokerage'])
@@ -469,6 +481,15 @@ async def run_reconciliation(
         merged['Variance'] = merged['Actual_Commission'] - merged['Expected_Commission']
         merged['Match_Status'] = merged['_merge'].map({'both': 'Matched', 'left_only': 'Pending / Unpaid', 'right_only': 'Unexpected / Orphan'})
         
+        # --- NEW BUSINESS LOGIC FLAG ---
+        def determine_action(row):
+            if row['Match_Status'] == 'Pending / Unpaid': return 'Missing Payment'
+            if row['Match_Status'] == 'Unexpected / Orphan': return 'Unmapped Policy'
+            if row['Variance'] < -5: return 'Short Received' # 5 rupee margin of error
+            return 'Cleared'
+
+        merged['Action_Required'] = merged.apply(determine_action, axis=1)
+
         # --- SAVE RECONCILIATION SNAPSHOT ---
         recon_snapshot = merged.copy()
         recon_snapshot['recon_timestamp'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -513,7 +534,7 @@ async def export_reconciliation(data: List[dict]):
             pending = df[df['Match_Status'] == 'Pending / Unpaid']
             orphan = df[df['Match_Status'] == 'Unexpected / Orphan']
 
-            first_cols = ['Match_Status', 'match_key', 'Expected_Commission', 'Actual_Commission', 'Variance']
+            first_cols = ['Action_Required', 'Match_Status', 'match_key', 'Expected_Commission', 'Actual_Commission', 'Variance']
             other_cols = [c for c in df.columns if c not in first_cols]
             final_cols = first_cols + other_cols
 
